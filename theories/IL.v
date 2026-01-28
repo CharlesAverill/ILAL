@@ -298,7 +298,6 @@ Abort.
 (** Denotational Relational Semantics *)
 (* Fig. 4 *)
 
-Close Scope ilogic_scope.
 Declare Scope ds_scope.
 Open Scope ds_scope.
 
@@ -363,6 +362,7 @@ Definition over_approximate (P Q : prop) (R : evaluation) : Prop :=
 Notation "<| p |> c <| q |>" := (over_approximate p q c)
       (at level 90, c constr at level 99) : ds_scope.
 
+(* Theorem 2 *)
 Theorem and_or_symmetry : forall P Q1 Q2 c,
   ({{ P }} c {{ Q1 }} /\ {{ P }} c {{ Q2 }}) <->
   {{ P }} c {{ Q1 \/ Q2 }}.
@@ -419,7 +419,58 @@ Proof.
   assumption.
 Qed.
 
+(* Lemma 3 *)
+Lemma characterization : forall P R Q,
+  {{P}} R {{Q}} <->
+  (forall sq, Q sq -> exists sp, P sp /\ R sp sq).
+Proof.
+  intros P R Q. split; intro.
+  - intros sq Qsq. specialize (H sq Qsq).
+    destruct H as (s' & Ps' & Step).
+    exists s'. split; assumption.
+  - intros s Qs. specialize (H s Qs).
+    destruct H as (sp & Psp & Rsps).
+    exists sp. split; assumption.
+Qed.
 
+(* Definition 4 *)
+Definition interpret_spec (P Q : prop) (C : stmt) ex : Prop :=
+  forall R, [C] ex |=> R ->
+  [[P]] C [[ex | Q]] <-> {{P}} R {{Q}}.
+
+(* Theorem 5 *)
+Theorem soundness :
+  forall C P Q R ex,
+    [C] ex |=> R ->
+    {{P}} R {{Q}} -> [[P]] C [[ex | Q]].
+Proof.
+  intros C P Q R.
+  induction C; intros; intros s Qs;
+    specialize (H0 s Qs);
+      destruct H0 as (s' & Ps' & Rss');
+      exists s'; (split; [assumption|]);
+      invs H; try solve [constructor].
+  - (* sequence error *) admit.
+  - (* sequence continue *) admit.
+  - (* choice *) admit.
+  - (* iteration ok *) admit.
+  - (* iteration er *) admit.
+  - (* assumes *) admit.
+Abort.
+
+Theorem completeness :
+  forall C P Q R ex,
+    [C] ex |=> R ->
+    [[P]] C [[ex | Q]] ->
+    {{P}} R {{Q}}.
+Proof.
+  intros C P Q R.
+  induction C; intros; intros s Qs;
+    specialize (H0 s Qs);
+    destruct H0 as (s' & Ps' & Step);
+    exists s'; (split; [assumption|]);
+    invs Step; invs H; auto.
+Abort.
 
 
 
