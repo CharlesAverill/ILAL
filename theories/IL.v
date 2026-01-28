@@ -10,6 +10,9 @@ Definition post (ex : ExitCondition) (c : stmt) (P : prop) : prop :=
     exists (s : state),
       P s /\ s =[ c ]=> ex | s').
 
+Declare Scope ilogic_scope.
+Open Scope ilogic_scope.
+
 (* Every state satisfying Q is reachable from some state satisfying
    P by executing c under exit condition ex *)
 Definition itriple (ex : ExitCondition) (P : prop) (c : stmt) (Q : prop) : Prop :=
@@ -17,18 +20,9 @@ Definition itriple (ex : ExitCondition) (P : prop) (c : stmt) (Q : prop) : Prop 
     Q s ->
     post ex c P s.
 Notation "[[ P ]] c [[ ex | Q ]]" :=
-  (itriple ex P c Q) (at level 90, c custom stmt at level 99).
+  (itriple ex P c Q) (at level 90, c custom stmt at level 99) : ilogic_scope.
 Notation "[[ P ]] c [[ ok | Q ]] [[ er | R ]]" :=
-  (itriple ok P c Q /\ itriple er P c R) (at level 90, c custom stmt at level 99).
-
-(* For every final state s that can result from executing c
-   from some state satisfying P, s satisfies Q *)
-Definition htriple (ex : ExitCondition) (P : prop) (c : stmt) (Q : prop) : Prop :=
-  forall (s : state),
-    post ex c P s ->
-    Q s.
-Notation "{{ P }} c {{ ex | Q }}" :=
-  (htriple ex P c Q) (at level 90, c custom stmt at level 99).
+  (itriple ok P c Q /\ itriple er P c R) (at level 90, c custom stmt at level 99) : ilogic_scope.
 
 Definition prop_impl (P Q : prop) : Prop :=
   forall (s : state), P s -> Q s.
@@ -300,6 +294,148 @@ Proof.
 Abort.
 
 (* The same goes for substitution_1 and substitution_2 *)
+
+(** Denotational Relational Semantics *)
+(* Fig. 4 *)
+
+Close Scope ilogic_scope.
+Declare Scope ds_scope.
+Open Scope ds_scope.
+
+Definition evaluation : Type := state -> state -> Prop.
+
+Reserved Notation
+         "[ c ] ec |=> eval"
+         (at level 40, c custom stmt at level 99,
+          ec constr, eval constr).
+Inductive ds : stmt -> ExitCondition -> evaluation -> Prop :=
+| ESkipOk (s : state) :
+    [ skip ] ok |=> (fun s1 s2 => s1 = s2)
+| EErrorEr (s : state) :
+    [ error() ] er |=> (fun s1 s2 => s1 = s2)
+| EAssumeOk (B : prop) (s : state) :
+    B s ->
+    [ assumes(B) ] ok |=> (fun s1 s2 => s1 = s2)
+| EStar0 C :
+    [ C** ] ok |=> (fun s1 s2 => s1 = s2)
+| EStarOk C R1 R2 :
+    [ C ] ok |=> R1 ->
+    [ C** ] ok |=> R2 ->
+    [ C** ] ok |=> (fun s1 s3 =>
+        exists s2, R1 s1 s2 /\ R2 s2 s2)
+| EStarEr C R :
+    [ C ] er |=> R ->
+    [ C** ] er |=> R
+| EPlus C1 C2 ex R1 R2 :
+    [ C1 ] ex |=> R1 ->
+    [ C2 ] ex |=> R2 ->
+    [ C1 <+> C2 ] ex |=> (fun s1 s2 => R1 s1 s2 \/ R2 s1 s2)
+| ESeqEr C1 C2 R :
+    [ C1 ] er |=> R ->
+    [ C1 ;; C2 ] er |=> R
+| ESeqOk C1 C2 ex R1 R2 :
+    [ C1 ] ok |=> R1 ->
+    [ C2 ] ex |=> R2 ->
+    [ C1 ;; C2 ] ex |=> (fun s1 s3 => exists s2, R1 s1 s2 /\ R2 s2 s3)
+
+| EAsgnOk x e :
+    [ x := e ] ok |=> (fun s s' => s' = s[x := e s])
+| EAsgnNondetOk x (v : N) :
+    [ x := v ] ok |=> (fun s s' => s' = s[x := v])
+
+where "[ c ] ec |=> eval" := (ds c ec eval).
+
+(* Definition 1 *)
+Definition ds_post (R : evaluation) (P : prop) (s : state) :=
+  exists s', P s' /\ R s' s.
+
+Definition under_approximate (P Q : prop) (R : evaluation) : Prop :=
+  forall s,
+    Q s ->
+    ds_post R P s.
+Notation "{{ p }} c {{ q }}" := (under_approximate p q c)
+      (at level 90, c constr at level 99) : ds_scope.
+
+Definition over_approximate (P Q : prop) (R : evaluation) : Prop :=
+  forall s,
+    ds_post R P s ->
+    Q s.
+Notation "<| p |> c <| q |>" := (over_approximate p q c)
+      (at level 90, c constr at level 99) : ds_scope.
+
+Theorem and_or_symmetry : forall P Q1 Q2 c,
+  ({{ P }} c {{ Q1 }} /\ {{ P }} c {{ Q2 }}) <->
+  {{ P }} c {{ Q1 \/ Q2 }}.
+Proof.
+  intros. split; intro.
+  - destruct H. intros s [Q1s|Q2s].
+      apply H, Q1s.
+      apply H0, Q2s.
+  - split; intros s Qs.
+      apply H. now left.
+      apply H. now right.
+Qed.
+
+Theorem impl_symmetry : forall P P' Q Q' c,
+  P ->> P' ->
+  {{P}}c{{Q}} ->
+  Q' ->> Q ->
+  {{P'}}c{{Q'}}.
+Proof.
+  intros P P' Q Q' c PP' Trip Q'Q s Q's.
+  apply Q'Q in Q's.
+  specialize (Trip s Q's).
+  destruct Trip as (s' & Ps' & Step).
+  exists s'. split. apply PP', Ps'.
+  assumption.
+Qed.
+
+Theorem principle_of_agreement : forall u u' c o o',
+  {{u}}c{{u'}} ->
+  (u ->> o) ->
+  <| o |> c <| o' |> ->
+  u' ->> o'.
+Proof.
+  intros u u' c o o' Trip uo oco' s u's.
+  apply oco'. specialize (Trip s u's).
+  destruct Trip as (s' & us' & Step).
+  exists s'. split.
+    apply uo. assumption.
+  assumption.
+Qed.
+
+Theorem principle_of_denial : forall u u' c o o',
+  {{u}}c{{u'}} ->
+  u ->> o ->
+  ~ (u' ->> o') ->
+  ~ (<| o |> c <| o' |>).
+Proof.
+  intros u u' c o o' ucu' uo u'o' oco'.
+  apply u'o'. intros s u's.
+  specialize (ucu' s u's).
+  destruct ucu' as (s' & us' & Step).
+  apply oco'. exists s'. split.
+    apply uo. assumption.
+  assumption.
+Qed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
