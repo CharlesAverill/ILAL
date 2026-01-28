@@ -130,6 +130,18 @@ Proof.
   - econstructor; eassumption.
 Qed.
 
+Lemma exists_or : forall (T : Type) (P R : T -> Prop),
+  (exists Q, (P Q \/ R Q)) <-> ((exists Q, P Q) \/ (exists Q, R Q)).
+Proof.
+  intros. split; intro.
+  - destruct H as (Q & [Pq | Rq]).
+      left. eauto.
+      right. eauto.
+  - destruct H, H.
+      exists x. now left.
+      exists x. now right.
+Qed.
+
 Theorem star_zero_inf :
   forall P C,
     [[P]] C** [[ok | P]].
@@ -321,7 +333,7 @@ Inductive ds : stmt -> ExitCondition -> evaluation -> Prop :=
     [ C ] ok |=> R1 ->
     [ C** ] ok |=> R2 ->
     [ C** ] ok |=> (fun s1 s3 =>
-        exists s2, R1 s1 s2 /\ R2 s2 s2)
+        exists s2, R1 s1 s2 /\ R2 s2 s3)
 | EStarEr C R :
     [ C ] er |=> R ->
     [ C** ] er |=> R
@@ -424,13 +436,8 @@ Lemma characterization : forall P R Q,
   {{P}} R {{Q}} <->
   (forall sq, Q sq -> exists sp, P sp /\ R sp sq).
 Proof.
-  intros P R Q. split; intro.
-  - intros sq Qsq. specialize (H sq Qsq).
-    destruct H as (s' & Ps' & Step).
-    exists s'. split; assumption.
-  - intros s Qs. specialize (H s Qs).
-    destruct H as (sp & Psp & Rsps).
-    exists sp. split; assumption.
+  intros P R Q.
+  unfold under_approximate, ds_post. reflexivity.
 Qed.
 
 (* Definition 4 *)
@@ -440,6 +447,59 @@ Definition interpret_spec (P Q : prop) (C : stmt) ex : Prop :=
 
 (* Theorem 5 *)
 Theorem soundness :
+  forall C P Q R ex,
+    [C] ex |=> R ->
+    [[P]] C [[ex | Q]] ->
+    {{P}} R {{Q}}.
+Proof.
+  intros C P Q R ex Hds Htrip.
+  rewrite characterization.
+  intros sq Qsq.
+  specialize (Htrip sq Qsq).
+  destruct Htrip as (sp & Psp & Step).
+  revert P Q sq sp Psp Step Qsq.
+  induction Hds; intros.
+  - (* skip *)
+    invs Step. exists sq. now split.
+  - (* error *)
+    invs Step. exists sq. now split.
+  - (* assumes *)
+    invs Step. exists sq. now split.
+  - (* star 0 *)
+    exists sq. invs Step.
+      now split.
+      admit.
+  - (* star n *)
+    invs Step. exists sq.
+    split. assumption.
+    admit.
+    exists sp. split. assumption.
+    admit.
+  - (* star er *)
+    invs Step. exists sp.
+    admit.
+  - (* plus *)
+    invs Step.
+      specialize (IHHds1 _ _ _ _ Psp H4 Qsq).
+      destruct IHHds1 as (sx & Psx & R1sx).
+      exists sp. split. assumption.
+      admit.
+      admit.
+  - (* seq er *)
+    invs Step.
+      eapply IHHds; eauto.
+    admit.
+  - (* seq ex *)
+    invs Step.
+      admit.
+      admit.
+  - (* assignment *)
+    invs Step. exists sp. now split.
+  - (* nondet assignment *)
+    invs Step. exists sp. now split.
+Admitted.
+
+Theorem completeness :
   forall C P Q R ex,
     [C] ex |=> R ->
     {{P}} R {{Q}} -> [[P]] C [[ex | Q]].
@@ -457,21 +517,6 @@ Proof.
   - (* iteration er *) admit.
   - (* assumes *) admit.
 Abort.
-
-Theorem completeness :
-  forall C P Q R ex,
-    [C] ex |=> R ->
-    [[P]] C [[ex | Q]] ->
-    {{P}} R {{Q}}.
-Proof.
-  intros C P Q R.
-  induction C; intros; intros s Qs;
-    specialize (H0 s Qs);
-    destruct H0 as (s' & Ps' & Step);
-    exists s'; (split; [assumption|]);
-    invs Step; invs H; auto.
-Abort.
-
 
 
 
