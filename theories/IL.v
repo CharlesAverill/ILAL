@@ -276,6 +276,14 @@ Proof.
   - intros s [].
 Qed.
 
+(* To prove this rule would be a massive undertaking.
+   It's unnecessary for proving IL's completeness,
+   and only serves to aid interprocedural analysis
+   (as far as I can tell). Proving this might even
+   require classical logic (if following strictly with
+   the paper's set-theoretical approach ) or otherwise
+   a very careful constructivist re-interpretation of
+   free and modified variables. *)
 Theorem constancy_inf :
   forall P Q f C ex,
     (forall x, mod_stmt x C <-> ~ free_prop x f) ->
@@ -289,9 +297,9 @@ Proof.
   - split. assumption.
       admit.
   - assumption.
-Admitted.
+Abort.
 
-
+(* The same goes for substitution_1 and substitution_2 *)
 
 
 
