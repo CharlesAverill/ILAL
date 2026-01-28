@@ -1,4 +1,5 @@
-From ILAL Require Import language.
+From ILAL Require Import language tactics.
+From Stdlib Require Import FunctionalExtensionality.
 
 (** Triple definitions *)
 
@@ -33,7 +34,8 @@ Definition prop_impl (P Q : prop) : Prop :=
   forall (s : state), P s -> Q s.
 Notation "P ->> Q" := (prop_impl P Q) (at level 80).
 
-(** Incorrectness logic inference rules *)
+(** Generic Proof Rules of Incorrectness Logic *)
+(* Fig. 2 *)
 
 Theorem empty_under_approximates_inf :
   forall P C ex,
@@ -159,7 +161,7 @@ Qed.
 
 Theorem backwards_variant_inf :
   forall P C,
-    (forall n, [[P n]] C [[ok | P (1 + n)]]) ->
+    (forall n, [[P n]] C [[ok | P (N.succ n)]]) ->
     [[P 0]] C** [[ok | (fun s => exists n, P n s)]].
 Proof.
   intros P C Forward s [n' Ex]. revert s Ex.
@@ -172,6 +174,125 @@ Proof.
     eapply star_nonzero_inf.
     eapply seq_inf.
       intros s' Qs'. eapply IHn', Qs'.
-    apply Forward. rewrite <- N.add_1_r, N.add_comm in Ex.
-    assumption.
+    apply Forward. assumption.
 Qed.
+
+Theorem choice_left_inf :
+  forall P Q C1 C2 ex,
+    [[P]] C1 [[ex | Q]] ->
+    [[P]] C1 <+> C2 [[ex | Q]].
+Proof.
+  intros P Q C1 C2 ex Left s Qs.
+  specialize (Left s Qs).
+  destruct Left as (s' & Ps' & Step).
+  exists s'. split.
+  - assumption.
+  - econstructor. assumption.
+Qed.
+
+Theorem choice_right_inf :
+  forall P Q C1 C2 ex,
+    [[P]] C2 [[ex | Q]] ->
+    [[P]] C1 <+> C2 [[ex | Q]].
+Proof.
+  intros P Q C1 C2 ex Right s Qs.
+  specialize (Right s Qs).
+  destruct Right as (s' & Ps' & Step).
+  exists s'. split.
+  - assumption.
+  - apply SChoiceR. assumption.
+Qed.
+
+Theorem error_inf :
+  forall P,
+    [[P]] error() [[ok | False]][[er | P]].
+Proof.
+  intros P. split.
+  - intros s Contra. contradiction.
+  - intros s Ps. exists s. split.
+    -- assumption.
+    -- constructor.
+Qed.
+
+Theorem assume_inf :
+  forall P B,
+    [[P]] assumes(B) [[ok | P /\ B]][[er | False]].
+Proof.
+  intros P B. split.
+  - intros s (Ps & Bs).
+    exists s. split.
+    -- assumption.
+    -- constructor. assumption.
+  - intros s Contra. contradiction.
+Qed.
+
+(** Rules for Variables and Mutation *)
+(* Fig. 3 *)
+
+Theorem assignment_inf :
+  forall P x e,
+    [[P]] x := e
+    [[ok | (fun s => exists x', P (s[x := s x']) /\
+                     s x = e (s[x := s x'])) ]]
+    [[er | False]].
+Proof.
+  intros P x e. split.
+  - intros s (x' & Pupd & Supd).
+    exists (s [x := s x']). split.
+    -- assumption.
+    -- assert (s = s[x := s x'][x := e (s[x := s x'])]).
+         extensionality i.
+         destruct (x =? i)%string eqn:E.
+           apply String.eqb_eq in E; subst.
+           rewrite update_eq. assumption.
+         repeat rewrite update_neq by
+           now apply String.eqb_neq.
+         reflexivity.
+       rewrite H at 3.
+       constructor.
+  - intros s [].
+Qed.
+
+Theorem nondet_assignment_inf :
+  forall P x,
+    [[P]] x := nondet()
+    [[ok | (fun s => exists x', P (s[x := x'])) ]]
+    [[er | False]].
+Proof.
+  intros P x. split.
+  - intros s (x' & Px').
+    exists (s[x := x']).
+    split. assumption.
+    assert (s = s[x := x'][x := s x]).
+      extensionality i.
+      destruct (x =? i)%string eqn:E.
+        apply String.eqb_eq in E; subst.
+        rewrite update_eq. reflexivity.
+      repeat rewrite update_neq by
+        now apply String.eqb_neq.
+      reflexivity.
+    rewrite H at 2.
+    constructor.
+  - intros s [].
+Qed.
+
+Theorem constancy_inf :
+  forall P Q f C ex,
+    (forall x, mod_stmt x C <-> ~ free_prop x f) ->
+    [[P]] C [[ex | Q]] ->
+    [[P /\ f]] C [[ex | Q /\ f]].
+Proof.
+  intros P Q f C ex Free Trip s (Qs & fs).
+  specialize (Trip s Qs).
+  destruct Trip as (s' & Ps' & Step).
+  exists s'. split.
+  - split. assumption.
+      admit.
+  - assumption.
+Admitted.
+
+
+
+
+
+

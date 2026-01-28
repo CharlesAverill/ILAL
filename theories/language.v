@@ -1,5 +1,6 @@
 From Stdlib Require Export NArith String.
 From Stdlib Require Import FunctionalExtensionality.
+From Stdlib Require Import Decidable.
 Open Scope N_scope.
 Open Scope string_scope.
 
@@ -169,6 +170,10 @@ Reserved Notation
 Inductive step : state -> stmt -> ExitCondition -> state -> Prop :=
 | SSkip (s : state) :
     s =[ skip ]=> ok | s
+| SAssign (s : state) (x : id) (e : expression) :
+    s =[ x := e ]=> ok | (s[x := e s])
+| SNondetAssign (s : state) (x : id) (v : N) :
+    s =[ x := nondet() ]=> ok | (s[x := v])
 | SSeqErr (s1 s2 : state) (c1 c2 : stmt) :
     s1 =[ c1 ]=> er | s2 ->
     s1 =[ c1 ;; c2 ]=> er | s2
@@ -201,7 +206,22 @@ where "st '=[' c ']=>' ec '|' st'" := (step st c ec st').
 (** Free variables *)
 
 (* i is free in prop P *)
+(* This is what the text describes as free. It seems
+   like the opposite *)
 Definition free_prop (i : id) (P : prop) : Prop :=
-  exists (s : state) (v : N),
-    P s /\ ~ P (s[i := v]).
+  (forall s,
+      P s <-> forall v, P (s[i := v])).
+
+(** Modified variables *)
+
+(* i is modified by command C *)
+Fixpoint mod_stmt (i : id) (s : stmt) : Prop :=
+  match s with
+  | <{ c1 ;; c2 }> => mod_stmt i c1 \/ mod_stmt i c2
+  | <{ c1 <+> c2 }> => mod_stmt i c1 \/ mod_stmt i c2
+  | <{ c** }> => mod_stmt i c
+  | <{ x := v }> => True
+  | <{ x := nondet() }> => True
+  | <{ _ }> => False
+  end.
 
