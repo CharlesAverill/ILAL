@@ -1,0 +1,7 @@
+(include_subdirs qualified)
+
+(rocq.theory
+ (name ILAL)
+ (package rocq-ilal)
+ (modules :standard)
+ (theories Stdlib))
