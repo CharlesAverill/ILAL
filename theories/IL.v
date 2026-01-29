@@ -504,6 +504,10 @@ Proof.
     econstructor; eassumption.
 Qed.
 
+Lemma or_same :
+  forall P, P \/ P <-> P.
+Proof. intuition. Qed.
+
 Theorem completeness :
   forall C P Q ex,
     {{P}} denote C ex {{Q}} ->
@@ -517,7 +521,42 @@ Proof.
   - (* sequence *)
     destruct ex.
     -- (* er *)
-       admit.
+       assert (forall s, Q s -> post er C2 (fun s' => post ok C1 P s') s \/ post er C1 P s) as S. {
+         intros s Qs.
+         specialize (DS s Qs).
+         destruct DS as (s' & Ps' & DS).
+         admit.
+       }
+
+       assert ([[P]] C1 ;; C2 [[er | post er C2 (fun s' => post ok C1 P s')]]) as X1. {
+         assert ([[P]] C1 [[ok | fun s => post ok C1 P s]]).
+           intros sx Post. assumption.
+         assert ([[fun s => post ok C1 P s]] C2 [[er | fun s => post er C2 (fun s' => post ok C1 P s') s]]).
+           intros sx Post. assumption.
+         eapply seq_inf.
+           apply H.
+         apply H0.
+       }
+
+       assert ([[P]] C1 ;; C2 [[er | fun s => post er C1 P s]]) as X2. {
+         assert ([[P]] C1 [[er | fun s => post er C1 P s]]).
+           intros s Post. assumption.
+         eapply seq_short_circuit_inf.
+           apply H.
+       }
+
+       assert ([[P]] C1 ;; C2 [[er | fun s => post er C2 (fun s' => post ok C1 P s') s \/ post er C1 P s]]) as X. {
+         pose proof (disjunction_inf _ _ _ _ _ _ X1 X2).
+         eapply consequence_inf; cycle 1.
+         apply H.
+         intros s Post. assumption.
+         intros s D. now destruct D.
+       }
+
+       eapply consequence_inf; cycle 1.
+       apply X.
+       intros s Qs. now apply S.
+       intros s Ps. assumption.
     -- (* ok *)
       assert ([[P]] C1 [[ok | fun s => post ok C1 P s]]) as HC1.
         intros s Post. assumption.
@@ -529,7 +568,27 @@ Proof.
         intros s Ps. apply Ps.
         apply X.
         intros s Qs. admit.
-  - (* choice *) admit.
+  - (* choice *)
+    assert (forall s, Q s -> post ex <{C1 <+> C2}> P s) as H.
+      admit.
+
+    assert (forall s, post ex <{C1 <+> C2}> P s -> post ex C1 P s \/ post ex C2 P s) as hPost.
+      admit.
+
+    assert ([[P]] C1 [[ex | fun s => post ex C1 P s]]).
+      intros s Ps. assumption.
+
+    assert ([[P]] C2 [[ex | fun s => post ex C2 P s]]).
+      intros s Ps. assumption.
+
+    pose proof (choice_left_inf _ _ _ C2 _ H0).
+    pose proof (choice_right_inf _ _ C1 _ _ H1).
+
+    pose proof (disjunction_inf _ _ _ _ _ _ H2 H3).
+    eapply consequence_inf; cycle 1.
+      apply H4.
+      intros s Qs. now apply hPost, H.
+      intros s Ps. now destruct Ps.
   - (* iteration *) admit.
 Abort.
 
