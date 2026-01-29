@@ -200,6 +200,27 @@ Inductive step : state -> stmt -> ExitCondition -> state -> Prop :=
 
 where "st '=[' c ']=>' ec '|' st'" := (step st c ec st').
 
+Theorem nondeterminism :
+  ~ (forall s s1' s2' c ex,
+      s =[ c ]=> ex | s1' ->
+      s =[ c ]=> ex | s2' ->
+      s1' = s2').
+Proof.
+  intro Contra.
+  set (empty := fun (_ : id) => 0).
+  specialize (Contra empty (empty["x" := 5]) (empty["x" := 6])
+    <{"x" := nondet()}> ok).
+  assert (empty =[ "x" := nondet() ]=> ok | (empty ["x" := 5])).
+    constructor.
+  assert (empty =[ "x" := nondet() ]=> ok | (empty ["x" := 6])).
+    constructor.
+  specialize (Contra H H0).
+  assert (empty ["x" := 5] "x" = empty ["x" := 6] "x").
+    now rewrite Contra.
+  repeat rewrite update_eq in H1.
+  discriminate.
+Qed.
+
 (** Free variables *)
 
 (* i is free in prop P *)

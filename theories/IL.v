@@ -485,61 +485,53 @@ Proof.
     now constructor.
 Qed.
 
+(* Theorem 6 *)
+Lemma post_equiv :
+  forall C1 C2 P s,
+    post ok <{C1 ;; C2}> P s <->
+    post ok C2 (fun s' => post ok C1 P s') s.
+Proof.
+  intros C1 C2 P s. split; intro.
+  - destruct H as (s' & Ps' & Step).
+    invs Step.
+    exists s2. split.
+      exists s'. now split.
+    assumption.
+  - destruct H as (s2 & Post & Step).
+    destruct Post as (s' & Ps' & Step').
+    exists s'.
+    split. assumption.
+    econstructor; eassumption.
+Qed.
+
 Theorem completeness :
   forall C P Q ex,
     {{P}} denote C ex {{Q}} ->
     [[P]] C [[ex | Q]].
 Proof.
-  intros C P Q ex DS s Qs;
+  induction C;
+  intros P Q ex DS; try solve [intros s Qs;
     specialize (DS s Qs);
-    destruct DS as (s' & Ps' & DS); unfold denote in DS.
-  revert P Q ex s s' Ps' Qs DS.
-  induction C; intros;
-    try solve [
-      invs DS; eexists; split; eauto; constructor].
+    destruct DS as (s' & Ps' & DS); unfold denote in DS;
+      invs DS; eexists; split; eauto; now constructor].
   - (* sequence *)
-    invs DS.
-    -- (* C1 error *)
-       specialize (IHC1 P Q er s s' Ps' Qs H2).
-       destruct IHC1 as (sx & Psx & Step).
-       exists sx. split. assumption. now constructor.
-    -- (* C2 ex *)
-       specialize (IHC1 P (fun _ => True) ok s2 s' Ps' I H3).
-       destruct IHC1 as (sx & Psx & Step).
-       enough (sx = s'). subst.
-       specialize (IHC2 (fun _ => True) Q ex s s2 I Qs H5).
-       destruct IHC2 as (sx' & Psx' & Step').
-       enough (sx' = s2). subst.
-
-       exists s'. split. assumption.
-         eapply SSeqOk; eassumption.
-
-       admit.
-       admit.
-  - (* plus *)
-    invs DS.
-    -- (* left *)
-       specialize (IHC1 _ _ ex _ _ Ps' Qs H2).
-       destruct IHC1 as (sx' & Psx' & Step).
-       exists sx'. split. assumption. now apply SChoiceL.
-    -- (* right *)
-       specialize (IHC2 _ _ ex _ _ Ps' Qs H2).
-       destruct IHC2 as (sx' & Psx' & Step).
-       exists sx'. split. assumption. now apply SChoiceR.
-  - (* star *)
-    invs DS.
-    -- (* skip *)
-       exists s. split. assumption. constructor.
-    -- (* ok *)
-       specialize (IHC _ _ ex _ _ Ps' Qs).
-       admit.
+    destruct ex.
     -- (* er *)
-       specialize (IHC _ _ er _ _ Ps' Qs H2).
-       destruct IHC as (sx' & Psx' & Step).
        admit.
-  - (* assumes *)
-    invs DS. exists s. split. assumption. now constructor.
-Admitted.
+    -- (* ok *)
+      assert ([[P]] C1 [[ok | fun s => post ok C1 P s]]) as HC1.
+        intros s Post. assumption.
+      assert ([[fun s => post ok C1 P s]] C2
+              [[ok | fun s => post ok C2 (fun s' => post ok C1 P s') s]]) as HC2.
+        intros s Post. assumption.
+      pose proof (seq_inf _ _ _ _ _ _ HC1 HC2) as X.
+      eapply consequence_inf.
+        intros s Ps. apply Ps.
+        apply X.
+        intros s Qs. admit.
+  - (* choice *) admit.
+  - (* iteration *) admit.
+Abort.
 
 
 
