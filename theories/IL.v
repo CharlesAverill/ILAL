@@ -313,65 +313,62 @@ Abort.
 Declare Scope ds_scope.
 Open Scope ds_scope.
 
-Definition evaluation : Type := state -> state -> Prop.
+Definition evaluation : Type := (state * state) -> Prop.
 
 Reserved Notation
-         "[ c ] ec |=> eval"
+         "[ c ] ec |=> s"
          (at level 40, c custom stmt at level 99,
-          ec constr, eval constr).
-Inductive ds : stmt -> ExitCondition -> evaluation -> Prop :=
+          ec constr, s constr).
+Inductive ds : stmt -> ExitCondition -> (state * state) -> Prop :=
 | ESkipOk (s : state) :
-    [ skip ] ok |=> (fun s1 s2 => s1 = s2)
+    [ skip ] ok |=> (s, s)
 | EErrorEr (s : state) :
-    [ error() ] er |=> (fun s1 s2 => s1 = s2)
+    [ error() ] er |=> (s, s)
 | EAssumeOk (B : prop) (s : state) :
     B s ->
-    [ assumes(B) ] ok |=> (fun s1 s2 => s1 = s2)
-| EStar0 C :
-    [ C** ] ok |=> (fun s1 s2 => s1 = s2)
-| EStarOk C R1 R2 :
-    [ C ] ok |=> R1 ->
-    [ C** ] ok |=> R2 ->
-    [ C** ] ok |=> (fun s1 s3 =>
-        exists s2, R1 s1 s2 /\ R2 s2 s3)
-| EStarEr C R :
-    [ C ] er |=> R ->
-    [ C** ] er |=> R
-| EPlus C1 C2 ex R1 R2 :
-    [ C1 ] ex |=> R1 ->
-    [ C2 ] ex |=> R2 ->
-    [ C1 <+> C2 ] ex |=> (fun s1 s2 => R1 s1 s2 \/ R2 s1 s2)
-| ESeqEr C1 C2 R :
-    [ C1 ] er |=> R ->
-    [ C1 ;; C2 ] er |=> R
-| ESeqOk C1 C2 ex R1 R2 :
-    [ C1 ] ok |=> R1 ->
-    [ C2 ] ex |=> R2 ->
-    [ C1 ;; C2 ] ex |=> (fun s1 s3 => exists s2, R1 s1 s2 /\ R2 s2 s3)
+    [ assumes(B) ] ok |=> (s, s)
+| EStar0 C (s : state) :
+    [ C** ] ok |=> (s, s)
+| EStarOk C s1 s2 s3 ex :
+    [ C** ] ok |=> (s1, s2) ->
+    [ C ] ex |=> (s2, s3) ->
+    [ C** ] ex |=> (s1, s3)
+| EStarEr C (s1 s2 : state) :
+    [ C ] er |=> (s1, s2) ->
+    [ C** ] er |=> (s1, s2)
+| EPlusL C1 C2 ex s s1 :
+    [ C1 ] ex |=> (s, s1) ->
+    [ C1 <+> C2 ] ex |=> (s, s1)
+| EPlusR C1 C2 ex s s1 :
+    [ C2 ] ex |=> (s, s1) ->
+    [ C1 <+> C2 ] ex |=> (s, s1)
+| ESeqEr C1 C2 s1 s2 :
+    [ C1 ] er |=> (s1, s2) ->
+    [ C1 ;; C2 ] er |=> (s1, s2)
+| ESeqOk C1 C2 ex s1 s2 s3 :
+    [ C1 ] ok |=> (s1, s2) ->
+    [ C2 ] ex |=> (s2, s3) ->
+    [ C1 ;; C2 ] ex |=> (s1, s3)
 
-| EAsgnOk x e :
-    [ x := e ] ok |=> (fun s s' => s' = s[x := e s])
-| EAsgnNondetOk x (v : N) :
-    [ x := v ] ok |=> (fun s s' => s' = s[x := v])
+| EAsgnOk x e s :
+    [ x := e ] ok |=> (s, s[x := e s])
+| EAsgnNondetOk x (v : N) s :
+    [ x := nondet() ] ok |=> (s, s[x := v])
 
-where "[ c ] ec |=> eval" := (ds c ec eval).
+where "[ c ] ec |=> s" := (ds c ec s).
 
 (* Definition 1 *)
-Definition ds_post (R : evaluation) (P : prop) (s : state) :=
-  exists s', P s' /\ R s' s.
+Definition ds_post (R : evaluation) (P : prop) :=
+  fun s' => exists s, P s /\ R (s, s').
 
-Definition under_approximate (P Q : prop) (R : evaluation) : Prop :=
-  forall s,
-    Q s ->
-    ds_post R P s.
-Notation "{{ p }} c {{ q }}" := (under_approximate p q c)
+Definition under_approximate (P : prop) (R : evaluation) (Q : prop) : Prop :=
+  forall s, Q s -> ds_post R P s.
+Notation "{{ p }} c {{ q }}" := (under_approximate p c q)
       (at level 90, c constr at level 99) : ds_scope.
 
-Definition over_approximate (P Q : prop) (R : evaluation) : Prop :=
-  forall s,
-    ds_post R P s ->
-    Q s.
-Notation "<| p |> c <| q |>" := (over_approximate p q c)
+Definition over_approximate (P : prop) (R : evaluation) (Q : prop) : Prop :=
+  forall s, ds_post R P s -> Q s.
+Notation "<| p |> c <| q |>" := (over_approximate p c q)
       (at level 90, c constr at level 99) : ds_scope.
 
 (* Theorem 2 *)
@@ -409,11 +406,12 @@ Theorem principle_of_agreement : forall u u' c o o',
   u' ->> o'.
 Proof.
   intros u u' c o o' Trip uo oco' s u's.
-  apply oco'. specialize (Trip s u's).
+  assert (ex : ExitCondition). constructor.
+  eapply oco'. specialize (Trip s u's).
   destruct Trip as (s' & us' & Step).
   exists s'. split.
     apply uo. assumption.
-  assumption.
+  eassumption.
 Qed.
 
 Theorem principle_of_denial : forall u u' c o o',
@@ -424,98 +422,74 @@ Theorem principle_of_denial : forall u u' c o o',
 Proof.
   intros u u' c o o' ucu' uo u'o' oco'.
   apply u'o'. intros s u's.
+  assert (ex : ExitCondition). constructor.
   specialize (ucu' s u's).
   destruct ucu' as (s' & us' & Step).
-  apply oco'. exists s'. split.
+  eapply oco'. exists s'. split.
     apply uo. assumption.
-  assumption.
+  eassumption.
 Qed.
 
 (* Lemma 3 *)
 Lemma characterization : forall P R Q,
   {{P}} R {{Q}} <->
-  (forall sq, Q sq -> exists sp, P sp /\ R sp sq).
-Proof.
-  intros P R Q.
-  unfold under_approximate, ds_post. reflexivity.
-Qed.
+  (forall sq, Q sq -> exists sp, P sp /\ R (sp, sq)).
+Proof. reflexivity. Qed.
 
 (* Definition 4 *)
+Definition denote (c : stmt) (ex : ExitCondition) : evaluation :=
+  fun '(s1, s2) => [c] ex |=> (s1, s2).
+
 Definition interpret_spec (P Q : prop) (C : stmt) ex : Prop :=
-  forall R, [C] ex |=> R ->
-  [[P]] C [[ex | Q]] <-> {{P}} R {{Q}}.
+  [[P]] C [[ex | Q]] <-> {{P}} denote C ex {{Q}}.
 
 (* Theorem 5 *)
-Theorem soundness :
-  forall C P Q R ex,
-    [C] ex |=> R ->
-    [[P]] C [[ex | Q]] ->
-    {{P}} R {{Q}}.
+Lemma star_equiv : forall c s1 s2 ex,
+  [(c **);; c] ex |=> (s1, s2) ->
+  [c **] ex |=> (s1, s2).
 Proof.
-  intros C P Q R ex Hds Htrip.
+  intros. invs H.
+    assumption.
+  econstructor; eassumption.
+Qed.
+
+Theorem soundness :
+  forall C P Q ex,
+    [[P]] C [[ex | Q]] ->
+    {{P}} denote C ex {{Q}}.
+Proof.
+  intros C P Q ex Htrip.
   rewrite characterization.
   intros sq Qsq.
   specialize (Htrip sq Qsq).
+  unfold post in Htrip.
   destruct Htrip as (sp & Psp & Step).
-  revert P Q sq sp Psp Step Qsq.
-  induction Hds; intros.
-  - (* skip *)
-    invs Step. exists sq. now split.
-  - (* error *)
-    invs Step. exists sq. now split.
-  - (* assumes *)
-    invs Step. exists sq. now split.
-  - (* star 0 *)
-    exists sq. invs Step.
-      now split.
-      admit.
-  - (* star n *)
-    invs Step. exists sq.
-    split. assumption.
-    admit.
-    exists sp. split. assumption.
-    admit.
-  - (* star er *)
-    invs Step. exists sp.
-    admit.
-  - (* plus *)
-    invs Step.
-      specialize (IHHds1 _ _ _ _ Psp H4 Qsq).
-      destruct IHHds1 as (sx & Psx & R1sx).
-      exists sp. split. assumption.
-      admit.
-      admit.
-  - (* seq er *)
-    invs Step.
-      eapply IHHds; eauto.
-    admit.
-  - (* seq ex *)
-    invs Step.
-      admit.
-      admit.
-  - (* assignment *)
-    invs Step. exists sp. now split.
-  - (* nondet assignment *)
-    invs Step. exists sp. now split.
-Admitted.
+  exists sp. split. assumption.
+  unfold denote. revert Q P Psp Qsq.
+  induction Step; intros;
+    try solve [constructor].
+  - (* sequence error *)
+    constructor. eapply IHStep; eassumption.
+  - (* sequence exit *)
+    econstructor. eapply IHStep1.
+      eassumption.
+    2: eapply IHStep2; eauto.
+    instantiate (1 := (fun _ => True)). exact I.
+  - (* star *)
+    eapply star_equiv, IHStep; eassumption.
+  - (* plus left *)
+    eapply EPlusL, IHStep; eassumption.
+  - (* plus right *)
+    eapply EPlusR, IHStep; eassumption.
+  - (* assumes ok *)
+    now constructor.
+Qed.
 
 Theorem completeness :
-  forall C P Q R ex,
-    [C] ex |=> R ->
-    {{P}} R {{Q}} -> [[P]] C [[ex | Q]].
+  forall C P Q ex,
+    {{P}} denote C ex {{Q}} ->
+    [[P]] C [[ex | Q]].
 Proof.
-  intros C P Q R.
-  induction C; intros; intros s Qs;
-    specialize (H0 s Qs);
-      destruct H0 as (s' & Ps' & Rss');
-      exists s'; (split; [assumption|]);
-      invs H; try solve [constructor].
-  - (* sequence error *) admit.
-  - (* sequence continue *) admit.
-  - (* choice *) admit.
-  - (* iteration ok *) admit.
-  - (* iteration er *) admit.
-  - (* assumes *) admit.
 Abort.
 
 

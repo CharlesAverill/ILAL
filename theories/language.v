@@ -197,9 +197,6 @@ Inductive step : state -> stmt -> ExitCondition -> state -> Prop :=
 | SAssumesOk (s : state) (P : prop) :
     P s ->
     s =[ assumes(P) ]=> ok | s
-| SAssumesEr (s : state) (P : prop) :
-    ~ P s ->
-    s =[ assumes(P) ]=> er | s
 
 where "st '=[' c ']=>' ec '|' st'" := (step st c ec st').
 
