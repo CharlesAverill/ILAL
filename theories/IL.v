@@ -490,8 +490,56 @@ Theorem completeness :
     {{P}} denote C ex {{Q}} ->
     [[P]] C [[ex | Q]].
 Proof.
-Abort.
+  intros C P Q ex DS s Qs;
+    specialize (DS s Qs);
+    destruct DS as (s' & Ps' & DS); unfold denote in DS.
+  revert P Q ex s s' Ps' Qs DS.
+  induction C; intros;
+    try solve [
+      invs DS; eexists; split; eauto; constructor].
+  - (* sequence *)
+    invs DS.
+    -- (* C1 error *)
+       specialize (IHC1 P Q er s s' Ps' Qs H2).
+       destruct IHC1 as (sx & Psx & Step).
+       exists sx. split. assumption. now constructor.
+    -- (* C2 ex *)
+       specialize (IHC1 P (fun _ => True) ok s2 s' Ps' I H3).
+       destruct IHC1 as (sx & Psx & Step).
+       enough (sx = s'). subst.
+       specialize (IHC2 (fun _ => True) Q ex s s2 I Qs H5).
+       destruct IHC2 as (sx' & Psx' & Step').
+       enough (sx' = s2). subst.
 
+       exists s'. split. assumption.
+         eapply SSeqOk; eassumption.
+
+       admit.
+       admit.
+  - (* plus *)
+    invs DS.
+    -- (* left *)
+       specialize (IHC1 _ _ ex _ _ Ps' Qs H2).
+       destruct IHC1 as (sx' & Psx' & Step).
+       exists sx'. split. assumption. now apply SChoiceL.
+    -- (* right *)
+       specialize (IHC2 _ _ ex _ _ Ps' Qs H2).
+       destruct IHC2 as (sx' & Psx' & Step).
+       exists sx'. split. assumption. now apply SChoiceR.
+  - (* star *)
+    invs DS.
+    -- (* skip *)
+       exists s. split. assumption. constructor.
+    -- (* ok *)
+       specialize (IHC _ _ ex _ _ Ps' Qs).
+       admit.
+    -- (* er *)
+       specialize (IHC _ _ er _ _ Ps' Qs H2).
+       destruct IHC as (sx' & Psx' & Step).
+       admit.
+  - (* assumes *)
+    invs DS. exists s. split. assumption. now constructor.
+Admitted.
 
 
 
