@@ -345,9 +345,10 @@ Inductive ds : stmt -> ExitCondition -> (state * state) -> Prop :=
 | ESeqEr C1 C2 s1 s2 :
     [ C1 ] er |=> (s1, s2) ->
     [ C1 ;; C2 ] er |=> (s1, s2)
-| ESeqOk C1 C2 ex s1 s2 s3 :
-    [ C1 ] ok |=> (s1, s2) ->
-    [ C2 ] ex |=> (s2, s3) ->
+| ESeqOk C1 C2 ex s1 s3 :
+    (exists s2,
+      [ C1 ] ok |=> (s1, s2) /\
+      [ C2 ] ex |=> (s2, s3)) ->
     [ C1 ;; C2 ] ex |=> (s1, s3)
 
 | EAsgnOk x e s :
@@ -450,6 +451,7 @@ Lemma star_equiv : forall c s1 s2 ex,
 Proof.
   intros. invs H.
     assumption.
+  destruct H3 as (s1' & CStar & C).
   econstructor; eassumption.
 Qed.
 
@@ -471,10 +473,10 @@ Proof.
   - (* sequence error *)
     constructor. eapply IHStep; eassumption.
   - (* sequence exit *)
-    econstructor. eapply IHStep1.
+    econstructor. exists s2. split. eapply IHStep1.
       eassumption.
-    2: eapply IHStep2; eauto.
     instantiate (1 := (fun _ => True)). exact I.
+    eauto.
   - (* star *)
     eapply star_equiv, IHStep; eassumption.
   - (* plus left *)
@@ -525,7 +527,20 @@ Proof.
          intros s Qs.
          specialize (DS s Qs).
          destruct DS as (s' & Ps' & DS).
-         admit.
+         unfold denote in DS.
+         invs DS.
+         + (* c1 error *)
+           right. unfold post.
+           exists s'. split. assumption.
+           specialize (IHC1 P Q er).
+           assert ({{P}} denote C1 er {{Q}}). {
+             unfold under_approximate.
+             intros sx Qsx. unfold ds_post, denote.
+             exists s'. split. assumption.
+             admit.
+           } specialize (IHC1 H s Qs).
+           destruct IHC1 as (s'' & Ps'' & IHC1).
+           admit.
        }
 
        assert ([[P]] C1 ;; C2 [[er | post er C2 (fun s' => post ok C1 P s')]]) as X1. {
@@ -558,6 +573,13 @@ Proof.
        intros s Qs. now apply S.
        intros s Ps. assumption.
     -- (* ok *)
+      assert (forall s, Q s -> post ok C2 (fun s' : state => post ok C1 P s') s) as S. {
+        intros s Qs. specialize (DS s Qs).
+        destruct DS as (s' & Ps' & DS).
+        invs DS. destruct H2 as (sx & C1x & C2x).
+        admit.
+      }
+
       assert ([[P]] C1 [[ok | fun s => post ok C1 P s]]) as HC1.
         intros s Post. assumption.
       assert ([[fun s => post ok C1 P s]] C2
@@ -567,7 +589,7 @@ Proof.
       eapply consequence_inf.
         intros s Ps. apply Ps.
         apply X.
-        intros s Qs. admit.
+        intros s Qs. now apply S.
   - (* choice *)
     assert (forall s, Q s -> post ex <{C1 <+> C2}> P s) as H.
       admit.
