@@ -307,6 +307,95 @@ Abort.
 
 (* The same goes for substitution_1 and substitution_2 *)
 
+(** Examples *)
+Example false_example_1 :
+  [[fun s => s "z" = 11]]
+    If (fun s => s "x" = 0) Then
+      "z" := 42
+    Else
+      skip
+    Done
+  [[ok | fun s => s "z" = 42]].
+Proof.
+  intros s Qs.
+  destruct (N.eq_dec (s "x") 0).
+  - exists (fun id => if id =? "z" then 11 else if id =? "x" then 0 else s id).
+    split. reflexivity.
+    apply SChoiceL.
+    econstructor. constructor. reflexivity.
+    replace s with ((fun id => if id =? "z" then 11 else if id =? "x" then 0 else s id)["z" := 42]) at 1.
+    constructor.
+    extensionality i.
+    destruct (string_dec i "z").
+    -- subst. rewrite update_eq. now symmetry.
+    -- rewrite update_neq by now symmetry.
+       apply eqb_neq in n. rewrite n.
+       destruct (string_dec i "x").
+       + subst. rewrite String.eqb_refl. now symmetry.
+       + apply eqb_neq in n0. now rewrite n0.
+  - exists (fun id => if id =? "z" then 11 else s id).
+    split. reflexivity.
+    apply SChoiceR.
+    econstructor; [|constructor].
+Abort.
+
+Example counterexample_1 :
+  ~ ([[fun s => s "z" = 11]]
+      If (fun s => s "x" = 0) Then
+        "z" := 42
+      Else
+        skip
+      Done
+    [[ok | fun s => s "z" = 42]]).
+Proof.
+  intro Contra.
+  specialize (Contra (fun id : string => match id with
+                    | "z" => 42
+                    | "x" => 99
+                    | _ => 0
+                    end) eq_refl).
+  destruct Contra as (s' & Ps' & Contra).
+  invs Contra.
+  - invs H4. invs H2. invs H6.
+    change (exp_of_N (N.pos 42) s2) with 42 in H4.
+    assert (s2 = (fun id => if id =? "z" then 11 else s2 id)). {
+      extensionality i.
+      destruct (i =? "z") eqn:E.
+        apply eqb_eq in E. now subst.
+      reflexivity.
+    } rewrite H in H4.
+    match type of H4 with
+    | ?x = ?y => assert (forall i, x i = y i) by now rewrite H4
+    end. clear H4. specialize (H0 "x"). simpl in H0.
+    rewrite update_neq in H0 by discriminate.
+    simpl in H0. rewrite H1 in H0. discriminate.
+  - invs H4. invs H2. invs H6. discriminate.
+Qed.
+
+Example example_2 :
+  [[fun s => s "z" = 11]]
+    If (fun s => s "x" = 0) Then
+      "z" := 42
+    Else
+      skip
+    Done
+   [[ok | fun s => s "z" = 42 /\ s "x" = 0]].
+Proof.
+  intros s [Qz Qx].
+  exists (s["z" := 11]["x" := 0]). split.
+    reflexivity.
+  apply SChoiceL.
+  replace s with (s ["z" := 42] ["z" := 11] ["x" := 0]["z" := 42]).
+  econstructor.
+  2: constructor.
+  repeat rewrite update_shadow.
+  rewrite update_swap by discriminate. rewrite update_shadow.
+  rewrite update_swap by discriminate. rewrite update_shadow.
+  now constructor.
+  rewrite update_shadow, update_swap, update_shadow by discriminate.
+  now repeat rewrite state_upd_eq.
+Qed.
+
 (** Denotational Relational Semantics *)
 (* Fig. 4 *)
 
@@ -541,6 +630,7 @@ Proof.
            } specialize (IHC1 H s Qs).
            destruct IHC1 as (s'' & Ps'' & IHC1).
            admit.
+         + admit.
        }
 
        assert ([[P]] C1 ;; C2 [[er | post er C2 (fun s' => post ok C1 P s')]]) as X1. {
@@ -577,6 +667,13 @@ Proof.
         intros s Qs. specialize (DS s Qs).
         destruct DS as (s' & Ps' & DS).
         invs DS. destruct H2 as (sx & C1x & C2x).
+        exists sx. split.
+          exists s'. split. assumption.
+          admit.
+        specialize (IHC2 True Q ok). edestruct IHC2.
+          intros x Qx. exists sx. split. exact I.
+        admit.
+        admit.
         admit.
       }
 
@@ -589,7 +686,22 @@ Proof.
       eapply consequence_inf.
         intros s Ps. apply Ps.
         apply X.
-        intros s Qs. now apply S.
+        intros s Qs.
+        rewrite <- post_equiv. specialize (DS s Qs).
+        destruct DS as (s' & Ps' & DS). invs DS.
+        destruct H2 as (s'' & C1s'' & C2s'').
+        specialize (IHC2 True Q ok).
+        edestruct IHC2. {
+          intros sx Qsx. exists s''. split. exact I.
+          admit.
+        }
+        eassumption.
+        specialize (IHC1 P True ok).
+        edestruct IHC1. admit.
+        exact I. destruct H, H0.
+        exists x0. split. assumption.
+        econstructor. eassumption.
+        eassumption.
   - (* choice *)
     assert (forall s, Q s -> post ex <{C1 <+> C2}> P s) as H.
       admit.
@@ -613,21 +725,3 @@ Proof.
       intros s Ps. now destruct Ps.
   - (* iteration *) admit.
 Abort.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

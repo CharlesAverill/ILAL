@@ -13,11 +13,11 @@ Definition loop0 : stmt := <{
 
 Definition client0 : stmt := <{
   loop0 ;;
-  if (fun s => s "x" = 2000000) then
+  If (fun s => s "x" = 2000000) Then
     error()
-  else
+  Else
     skip
-  done
+  Done
   }>.
 
 Definition loop1 : stmt := <{
@@ -27,20 +27,20 @@ Definition loop1 : stmt := <{
 
 Definition client1 : stmt := <{
   loop1;;
-  if (fun s => s "x" = 2000000) then
+  If (fun s => s "x" = 2000000) Then
     error()
-  else
+  Else
     skip
-  done
+  Done
   }>.
 
 Definition loop2 : stmt := <{
   "x" := 0;;
-  (if (fun s => s "x" = 2000000) then
+  (If (fun s => s "x" = 2000000) Then
     error()
-   else
+   Else
     skip
-   done;;
+   Done;;
    "x" := (fun s => s "x" + 1)
   )**
   }>.

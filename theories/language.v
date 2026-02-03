@@ -143,9 +143,9 @@ Notation "a * b" := (fun st => st a * st b) : prop_scope.
 Notation "'while' B 'do' C 'done'" :=
         <{((assumes(B) ;; C) **) ;; assumes(~ B)}>
         (in custom stmt at level 0, B constr, C custom stmt at level 99, no associativity) : simpl_scope.
-Notation "'if' B 'then' C 'else' C' 'done'" :=
-        <{(assumes(B) ;; C) <+> (assumes(~ B) ;; C')}>
-        (in custom stmt at level 0, B constr, C custom stmt at level 99, C' custom stmt at level 99, no associativity) : simpl_scope.
+Notation "'If' B 'Then' C1 'Else' C2 'Done'" :=
+        <{(assumes(B) ;; C1) <+> (assumes(~ B) ;; C2)}>
+        (in custom stmt at level 0, B constr, C1 custom stmt at level 99, C2 custom stmt at level 99, no associativity) : simpl_scope.
 Notation "'assert(' B ')'" :=
         <{assumes(B) <+> (assumes(~ B) ;; error()) }>
         (in custom stmt at level 0, B constr, no associativity) : simpl_scope.
