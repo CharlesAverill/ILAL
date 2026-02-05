@@ -28,374 +28,6 @@ Definition prop_impl (P Q : prop) : Prop :=
   forall (s : state), P s -> Q s.
 Notation "P ->> Q" := (prop_impl P Q) (at level 80).
 
-(** Generic Proof Rules of Incorrectness Logic *)
-(* Fig. 2 *)
-
-Theorem empty_under_approximates_inf :
-  forall P C ex,
-    [[P]] C [[ex | False]].
-Proof.
-  intros P C ex s Contra. contradiction.
-Qed.
-
-Theorem consequence_inf :
-  forall P P' Q Q' C ex,
-    P ->> P' ->
-    [[P]]  C [[ex | Q]] ->
-    Q' ->> Q ->
-    [[P']] C [[ex | Q']].
-Proof.
-  intros P P' Q Q' C ex Impl1 Trip Impl2 s Q's.
-  specialize (Impl2 s Q's).
-  specialize (Trip s Impl2).
-  destruct Trip as (s' & Ps' & Step).
-  exists s'. split.
-  - apply Impl1. assumption.
-  - assumption.
-Qed.
-
-Theorem disjunction_inf :
-  forall P1 P2 Q1 Q2 ex C,
-    [[P1]] C [[ex | Q1]] ->
-    [[P2]] C [[ex | Q2]] ->
-    [[P1 \/ P2]] C [[ex | Q1 \/ Q2]].
-Proof.
-  intros P1 P2 Q1 Q2 ex C Left Right s [Q1s|Q2s].
-  - (* Left *)
-    specialize (Left s Q1s).
-    destruct Left as (s' & P1s' & Step).
-    exists s'. split.
-    -- left. assumption.
-    -- assumption.
-  - (* Right *)
-    specialize (Right s Q2s).
-    destruct Right as (s' & P2s' & Step).
-    exists s'. split.
-    -- right. assumption.
-    -- assumption.
-Qed.
-
-Theorem unit_ok_inf :
-  forall P,
-    [[P]] skip [[ok | P]].
-Proof.
-  intros P s Ps. exists s.
-  split.
-  - assumption.
-  - constructor.
-Qed.
-
-Theorem unit_er_inf :
-  forall P,
-    [[P]] skip [[er | False]].
-Proof.
-  intros P s Contra. contradiction.
-Qed.
-
-Theorem unit_inf :
-  forall P,
-    [[P]] skip [[ok | P]][[er | False]].
-Proof.
-  intros. split.
-  - apply unit_ok_inf.
-  - apply unit_er_inf.
-Qed.
-
-Theorem seq_short_circuit_inf :
-  forall P R C1 C2,
-    [[P]] C1 [[er | R]] ->
-    [[P]] C1 ;; C2 [[ er | R]].
-Proof.
-  intros P R C1 C2 Trip s Rs.
-  specialize (Trip s Rs).
-  destruct Trip as (s' & Ps' & Step).
-  exists s'. split.
-  - assumption.
-  - constructor. assumption.
-Qed.
-
-Theorem seq_inf :
-  forall P Q R C1 C2 ex,
-    [[P]] C1 [[ok | Q]] ->
-    [[Q]] C2 [[ex | R]] ->
-    [[P]] C1 ;; C2 [[ex | R]].
-Proof.
-  intros P Q R C1 C2 ex Left Right s Rs.
-  specialize (Right s Rs).
-  destruct Right as (s' & Qs' & Rstep).
-  specialize (Left s' Qs').
-  destruct Left as (s'' & Ps'' & Lstep).
-  exists s''. split.
-  - assumption.
-  - econstructor; eassumption.
-Qed.
-
-Lemma exists_or : forall (T : Type) (P R : T -> Prop),
-  (exists Q, (P Q \/ R Q)) <-> ((exists Q, P Q) \/ (exists Q, R Q)).
-Proof.
-  intros. split; intro.
-  - destruct H as (Q & [Pq | Rq]).
-      left. eauto.
-      right. eauto.
-  - destruct H, H.
-      exists x. now left.
-      exists x. now right.
-Qed.
-
-Theorem star_zero_inf :
-  forall P C,
-    [[P]] C** [[ok | P]].
-Proof.
-  intros P C s Ps.
-  exists s. split.
-  - assumption.
-  - constructor.
-Qed.
-
-Theorem star_nonzero_inf :
-  forall P Q C ex,
-    [[P]] C** ;; C [[ex | Q]] ->
-    [[P]] C** [[ex | Q]].
-Proof.
-  intros P Q C ex Trip s Qs.
-  specialize (Trip s Qs).
-  destruct Trip as (s' & Ps' & Step).
-  exists s'. split.
-  - assumption.
-  - constructor. assumption.
-Qed.
-
-Theorem backwards_variant_inf :
-  forall P C,
-    (forall n, [[P n]] C [[ok | P (N.succ n)]]) ->
-    [[P 0]] C** [[ok | (fun s => exists n, P n s)]].
-Proof.
-  intros P C Forward s [n' Ex]. revert s Ex.
-  induction n' using N.peano_ind; intros.
-  - (* n = 0 *)
-    exists s. split.
-    -- assumption.
-    -- constructor.
-  - (* n = S k *)
-    eapply star_nonzero_inf.
-    eapply seq_inf.
-      intros s' Qs'. eapply IHn', Qs'.
-    apply Forward. assumption.
-Qed.
-
-Theorem choice_left_inf :
-  forall P Q C1 C2 ex,
-    [[P]] C1 [[ex | Q]] ->
-    [[P]] C1 <+> C2 [[ex | Q]].
-Proof.
-  intros P Q C1 C2 ex Left s Qs.
-  specialize (Left s Qs).
-  destruct Left as (s' & Ps' & Step).
-  exists s'. split.
-  - assumption.
-  - econstructor. assumption.
-Qed.
-
-Theorem choice_right_inf :
-  forall P Q C1 C2 ex,
-    [[P]] C2 [[ex | Q]] ->
-    [[P]] C1 <+> C2 [[ex | Q]].
-Proof.
-  intros P Q C1 C2 ex Right s Qs.
-  specialize (Right s Qs).
-  destruct Right as (s' & Ps' & Step).
-  exists s'. split.
-  - assumption.
-  - apply SChoiceR. assumption.
-Qed.
-
-Theorem error_inf :
-  forall P,
-    [[P]] error() [[ok | False]][[er | P]].
-Proof.
-  intros P. split.
-  - intros s Contra. contradiction.
-  - intros s Ps. exists s. split.
-    -- assumption.
-    -- constructor.
-Qed.
-
-Theorem assume_inf :
-  forall P B,
-    [[P]] assumes(B) [[ok | P /\ B]][[er | False]].
-Proof.
-  intros P B. split.
-  - intros s (Ps & Bs).
-    exists s. split.
-    -- assumption.
-    -- constructor. assumption.
-  - intros s Contra. contradiction.
-Qed.
-
-(** Rules for Variables and Mutation *)
-(* Fig. 3 *)
-
-Theorem assignment_inf :
-  forall P x e,
-    [[P]] x := e
-    [[ok | (fun s => exists x', P (s[x := s x']) /\
-                     s x = e (s[x := s x'])) ]]
-    [[er | False]].
-Proof.
-  intros P x e. split.
-  - intros s (x' & Pupd & Supd).
-    exists (s [x := s x']). split.
-    -- assumption.
-    -- assert (s = s[x := s x'][x := e (s[x := s x'])]).
-         extensionality i.
-         destruct (x =? i)%string eqn:E.
-           apply String.eqb_eq in E; subst.
-           rewrite update_eq. assumption.
-         repeat rewrite update_neq by
-           now apply String.eqb_neq.
-         reflexivity.
-       rewrite H at 3.
-       constructor.
-  - intros s [].
-Qed.
-
-Theorem nondet_assignment_inf :
-  forall P x,
-    [[P]] x := nondet()
-    [[ok | (fun s => exists x', P (s[x := x'])) ]]
-    [[er | False]].
-Proof.
-  intros P x. split.
-  - intros s (x' & Px').
-    exists (s[x := x']).
-    split. assumption.
-    assert (s = s[x := x'][x := s x]).
-      extensionality i.
-      destruct (x =? i)%string eqn:E.
-        apply String.eqb_eq in E; subst.
-        rewrite update_eq. reflexivity.
-      repeat rewrite update_neq by
-        now apply String.eqb_neq.
-      reflexivity.
-    rewrite H at 2.
-    constructor.
-  - intros s [].
-Qed.
-
-(* To prove this rule would be a massive undertaking.
-   It's unnecessary for proving IL's completeness,
-   and only serves to aid interprocedural analysis
-   (as far as I can tell). Proving this might even
-   require classical logic (if following strictly with
-   the paper's set-theoretical approach ) or otherwise
-   a very careful constructivist re-interpretation of
-   free and modified variables. *)
-Theorem constancy_inf :
-  forall P Q f C ex,
-    (forall x, mod_stmt x C <-> ~ free_prop x f) ->
-    [[P]] C [[ex | Q]] ->
-    [[P /\ f]] C [[ex | Q /\ f]].
-Proof.
-  intros P Q f C ex Free Trip s (Qs & fs).
-  specialize (Trip s Qs).
-  destruct Trip as (s' & Ps' & Step).
-  exists s'. split.
-  - split. assumption.
-      admit.
-  - assumption.
-Abort.
-
-(* The same goes for substitution_1 and substitution_2 *)
-
-(** Examples *)
-Example false_example_1 :
-  [[fun s => s "z" = 11]]
-    If (fun s => s "x" = 0) Then
-      "z" := 42
-    Else
-      skip
-    Done
-  [[ok | fun s => s "z" = 42]].
-Proof.
-  intros s Qs.
-  destruct (N.eq_dec (s "x") 0).
-  - exists (fun id => if id =? "z" then 11 else if id =? "x" then 0 else s id).
-    split. reflexivity.
-    apply SChoiceL.
-    econstructor. constructor. reflexivity.
-    replace s with ((fun id => if id =? "z" then 11 else if id =? "x" then 0 else s id)["z" := 42]) at 1.
-    constructor.
-    extensionality i.
-    destruct (string_dec i "z").
-    -- subst. rewrite update_eq. now symmetry.
-    -- rewrite update_neq by now symmetry.
-       apply eqb_neq in n. rewrite n.
-       destruct (string_dec i "x").
-       + subst. rewrite String.eqb_refl. now symmetry.
-       + apply eqb_neq in n0. now rewrite n0.
-  - exists (fun id => if id =? "z" then 11 else s id).
-    split. reflexivity.
-    apply SChoiceR.
-    econstructor; [|constructor].
-Abort.
-
-Example counterexample_1 :
-  ~ ([[fun s => s "z" = 11]]
-      If (fun s => s "x" = 0) Then
-        "z" := 42
-      Else
-        skip
-      Done
-    [[ok | fun s => s "z" = 42]]).
-Proof.
-  intro Contra.
-  specialize (Contra (fun id : string => match id with
-                    | "z" => 42
-                    | "x" => 99
-                    | _ => 0
-                    end) eq_refl).
-  destruct Contra as (s' & Ps' & Contra).
-  invs Contra.
-  - invs H4. invs H2. invs H6.
-    change (exp_of_N (N.pos 42) s2) with 42 in H4.
-    assert (s2 = (fun id => if id =? "z" then 11 else s2 id)). {
-      extensionality i.
-      destruct (i =? "z") eqn:E.
-        apply eqb_eq in E. now subst.
-      reflexivity.
-    } rewrite H in H4.
-    match type of H4 with
-    | ?x = ?y => assert (forall i, x i = y i) by now rewrite H4
-    end. clear H4. specialize (H0 "x"). simpl in H0.
-    rewrite update_neq in H0 by discriminate.
-    simpl in H0. rewrite H1 in H0. discriminate.
-  - invs H4. invs H2. invs H6. discriminate.
-Qed.
-
-Example example_2 :
-  [[fun s => s "z" = 11]]
-    If (fun s => s "x" = 0) Then
-      "z" := 42
-    Else
-      skip
-    Done
-   [[ok | fun s => s "z" = 42 /\ s "x" = 0]].
-Proof.
-  intros s [Qz Qx].
-  exists (s["z" := 11]["x" := 0]). split.
-    reflexivity.
-  apply SChoiceL.
-  replace s with (s ["z" := 42] ["z" := 11] ["x" := 0]["z" := 42]).
-  econstructor.
-  2: constructor.
-  repeat rewrite update_shadow.
-  rewrite update_swap by discriminate. rewrite update_shadow.
-  rewrite update_swap by discriminate. rewrite update_shadow.
-  now constructor.
-  rewrite update_shadow, update_swap, update_shadow by discriminate.
-  now repeat rewrite state_upd_eq.
-Qed.
-
 (** Denotational Relational Semantics *)
 (* Fig. 4 *)
 
@@ -439,7 +71,6 @@ Inductive ds : stmt -> ExitCondition -> (state * state) -> Prop :=
       [ C1 ] ok |=> (s1, s2) /\
       [ C2 ] ex |=> (s2, s3)) ->
     [ C1 ;; C2 ] ex |=> (s1, s3)
-
 | EAsgnOk x e s :
     [ x := e ] ok |=> (s, s[x := e s])
 | EAsgnNondetOk x (v : N) s :
@@ -544,184 +175,167 @@ Proof.
   econstructor; eassumption.
 Qed.
 
+Reserved Notation
+         "P , [ c ] ec , Q"
+         (at level 40, c custom stmt at level 99).
+Inductive derivable : prop -> stmt -> ExitCondition -> prop -> Prop :=
+| EmptyUnderApproximates P c e :
+    P, [c] e, False
+| Consequence P P' Q Q' c e :
+    P, [c] e, Q ->
+    P ->> P' ->
+    Q' ->> Q ->
+    P', [c] e, Q'
+| Disjunction P1 Q1 P2 Q2 c e :
+    P1, [c] e, Q1 ->
+    P2, [c] e, Q2 ->
+    (fun s => P1 s \/ P2 s), [c] e, (fun s => Q1 s \/ Q2 s)
+| UnitOk P :
+    P, [skip] ok, P
+| UnitEr P :
+    P, [skip] er, False
+| SeqShortCircuit P R C1 C2 :
+    P, [C1] er, R ->
+    P, [C1 ;; C2] er, R
+| SeqNormal P Q R C1 C2 e :
+    P, [C1] ok, Q ->
+    Q, [C2] e, R ->
+    P, [C1 ;; C2] e, R
+| IterateZero P C :
+    P, [C**] ok, P
+| IterateNonzero P Q C e :
+    P, [C** ;; C] e, Q ->
+    P, [C**] e, Q
+| BackwardsVariant (P : N -> prop) C :
+    (forall n, P n, [C] ok, P (N.succ n)) ->
+    P 0, [C**] ok, (fun s => exists n', P n' s)
+| ChoiceLeft P Q C1 C2 e:
+    P, [C1] e, Q ->
+    P, [C1 <+> C2] e, Q
+| ChoiceRight P Q C1 C2 e:
+    P, [C2] e, Q ->
+    P, [C1 <+> C2] e, Q
+| ErrorOk P :
+    P, [error()] ok, False
+| ErrorEr P :
+    P, [error()] er, P
+| AssumeOk P B :
+    P, [assumes(B)] ok, (fun s => P s /\ B s)
+| AssumeEr P B :
+    P, [assumes(B)] er, False
+| AssignmentOk P x (e : expression) :
+    P, [x := e] ok, (fun s => exists x', P (s[x := x']) /\
+                              s x = e (s[x := x']))
+| AssignmentEr P x (e : expression) :
+    P, [x := e] er, False
+| NondetAssignmentOk P x :
+    P, [x := nondet()] ok, (fun s => exists x', P (s[x := x']))
+| NondetAssignmentEr P x :
+    P, [x := nondet()] er, False
+
+where "P , [ c ] ec , Q" := (derivable P c ec Q).
+
 Theorem soundness :
   forall C P Q ex,
-    [[P]] C [[ex | Q]] ->
+    P, [C] ex, Q ->
     {{P}} denote C ex {{Q}}.
-Proof.
-  intros C P Q ex Htrip.
-  rewrite characterization.
-  intros sq Qsq.
-  specialize (Htrip sq Qsq).
-  unfold post in Htrip.
-  destruct Htrip as (sp & Psp & Step).
-  exists sp. split. assumption.
-  unfold denote. revert Q P Psp Qsq.
-  induction Step; intros;
-    try solve [constructor].
-  - (* sequence error *)
-    constructor. eapply IHStep; eassumption.
-  - (* sequence exit *)
-    econstructor. exists s2. split. eapply IHStep1.
-      eassumption.
-    instantiate (1 := (fun _ => True)). exact I.
-    eauto.
-  - (* star *)
-    eapply star_equiv, IHStep; eassumption.
-  - (* plus left *)
-    eapply EPlusL, IHStep; eassumption.
-  - (* plus right *)
-    eapply EPlusR, IHStep; eassumption.
-  - (* assumes ok *)
-    now constructor.
-Qed.
+    Proof. 
+    intros. induction H.
+    - unfold under_approximate. intros. contradiction.
+    - apply (impl_symmetry P P' Q Q'); auto.
+    - admit.
+   Abort.
 
-(* Theorem 6 *)
-Lemma post_equiv :
-  forall C1 C2 P s,
-    post ok <{C1 ;; C2}> P s <->
-    post ok C2 (fun s' => post ok C1 P s') s.
-Proof.
-  intros C1 C2 P s. split; intro.
-  - destruct H as (s' & Ps' & Step).
-    invs Step.
-    exists s2. split.
-      exists s'. now split.
-    assumption.
-  - destruct H as (s2 & Post & Step).
-    destruct Post as (s' & Ps' & Step').
-    exists s'.
-    split. assumption.
-    econstructor; eassumption.
-Qed.
-
-Lemma or_same :
-  forall P, P \/ P <-> P.
-Proof. intuition. Qed.
 
 Theorem completeness :
   forall C P Q ex,
     {{P}} denote C ex {{Q}} ->
-    [[P]] C [[ex | Q]].
-Proof.
-  induction C;
-  intros P Q ex DS; try solve [intros s Qs;
-    specialize (DS s Qs);
-    destruct DS as (s' & Ps' & DS); unfold denote in DS;
-      invs DS; eexists; split; eauto; now constructor].
-  - (* sequence *)
-    destruct ex.
-    -- (* er *)
-       assert (forall s, Q s -> post er C2 (fun s' => post ok C1 P s') s \/ post er C1 P s) as S. {
-         intros s Qs.
-         specialize (DS s Qs).
-         destruct DS as (s' & Ps' & DS).
-         unfold denote in DS.
-         invs DS.
-         + (* c1 error *)
-           right. unfold post.
-           exists s'. split. assumption.
-           specialize (IHC1 P Q er).
-           assert ({{P}} denote C1 er {{Q}}). {
-             unfold under_approximate.
-             intros sx Qsx. unfold ds_post, denote.
-             exists s'. split. assumption.
-             admit.
-           } specialize (IHC1 H s Qs).
-           destruct IHC1 as (s'' & Ps'' & IHC1).
-           admit.
-         + admit.
-       }
+    P, [C] ex, Q.
+    Proof. 
+    induction C ; intros P Q ex DS.
+    - destruct ex.
+      -- eapply Consequence with (Q := (fun s => False)).
+        --- apply UnitEr.
+        --- intros s Hp. exact Hp.
+        --- intros s HQ. destruct (DS s HQ). inversion H. inversion H1.
+      -- eapply Consequence with (Q := P).
+        --- apply UnitOk.
+        --- intros s Hp. exact Hp.
+        --- intros s Hq. destruct (DS s Hq) as (s1 & HP & Hstep). invs Hstep. exact HP.
+   - destruct ex.
+    -- eapply Consequence with (Q := (fun s => False)).
+      --- apply AssignmentEr.
+      --- intros s Hp. exact Hp. 
+      --- intros s Hq. destruct (DS s Hq). invs H. inversion H1.
+    -- eapply Consequence with (Q := (fun s => exists i', P (s[i := i']) /\
+                              s i = exp (s[i := i']))).
+      --- apply AssignmentOk.
+      --- intros s Hp. exact Hp.
+      --- intros s Hq. destruct (DS s Hq). invs H. invs H1. admit. (** confused about definition for AssignmentOK **)
+  - admit. (** idem **)
+  - destruct ex.
+  -- set (Mid := fun s2 => exists s1, P s1 /\ [C1] ok |=> (s1, s2)).
+  set (Qsc := fun s3 => Q s3 /\ exists s1, P s1 /\ [C1] er |=> (s1, s3)).
+  set (Qnm := fun s3 => Q s3 /\ exists s2, Mid s2 /\ [C2] er |=> (s2, s3)).
+  
+  assert (DS_C1_er : {{P}} denote C1 er {{Qsc}}).
+  {
+    intros s3 HQsc.
+    destruct HQsc. destruct H0. destruct H0. 
+    exists x. split; assumption.
+  } 
+  
+  pose proof (IHC1 P Qsc er DS_C1_er) as D_C1_er.
+  pose proof (SeqShortCircuit P Qsc C1 C2 D_C1_er) as D_sc.
 
-       assert ([[P]] C1 ;; C2 [[er | post er C2 (fun s' => post ok C1 P s')]]) as X1. {
-         assert ([[P]] C1 [[ok | fun s => post ok C1 P s]]).
-           intros sx Post. assumption.
-         assert ([[fun s => post ok C1 P s]] C2 [[er | fun s => post er C2 (fun s' => post ok C1 P s') s]]).
-           intros sx Post. assumption.
-         eapply seq_inf.
-           apply H.
-         apply H0.
-       }
-
-       assert ([[P]] C1 ;; C2 [[er | fun s => post er C1 P s]]) as X2. {
-         assert ([[P]] C1 [[er | fun s => post er C1 P s]]).
-           intros s Post. assumption.
-         eapply seq_short_circuit_inf.
-           apply H.
-       }
-
-       assert ([[P]] C1 ;; C2 [[er | fun s => post er C2 (fun s' => post ok C1 P s') s \/ post er C1 P s]]) as X. {
-         pose proof (disjunction_inf _ _ _ _ _ _ X1 X2).
-         eapply consequence_inf; cycle 1.
-         apply H.
-         intros s Post. assumption.
-         intros s D. now destruct D.
-       }
-
-       eapply consequence_inf; cycle 1.
-       apply X.
-       intros s Qs. now apply S.
-       intros s Ps. assumption.
-    -- (* ok *)
-      assert (forall s, Q s -> post ok C2 (fun s' : state => post ok C1 P s') s) as S. {
-        intros s Qs. specialize (DS s Qs).
-        destruct DS as (s' & Ps' & DS).
-        invs DS. destruct H2 as (sx & C1x & C2x).
-        exists sx. split.
-          exists s'. split. assumption.
-          admit.
-        specialize (IHC2 True Q ok). edestruct IHC2.
-          intros x Qx. exists sx. split. exact I.
-        admit.
-        admit.
-        admit.
-      }
-
-      assert ([[P]] C1 [[ok | fun s => post ok C1 P s]]) as HC1.
-        intros s Post. assumption.
-      assert ([[fun s => post ok C1 P s]] C2
-              [[ok | fun s => post ok C2 (fun s' => post ok C1 P s') s]]) as HC2.
-        intros s Post. assumption.
-      pose proof (seq_inf _ _ _ _ _ _ HC1 HC2) as X.
-      eapply consequence_inf.
-        intros s Ps. apply Ps.
-        apply X.
-        intros s Qs.
-        rewrite <- post_equiv. specialize (DS s Qs).
-        destruct DS as (s' & Ps' & DS). invs DS.
-        destruct H2 as (s'' & C1s'' & C2s'').
-        specialize (IHC2 True Q ok).
-        edestruct IHC2. {
-          intros sx Qsx. exists s''. split. exact I.
-          admit.
-        }
-        eassumption.
-        specialize (IHC1 P True ok).
-        edestruct IHC1. admit.
-        exact I. destruct H, H0.
-        exists x0. split. assumption.
-        econstructor. eassumption.
-        eassumption.
-  - (* choice *)
-    assert (forall s, Q s -> post ex <{C1 <+> C2}> P s) as H.
-      admit.
-
-    assert (forall s, post ex <{C1 <+> C2}> P s -> post ex C1 P s \/ post ex C2 P s) as hPost.
-      admit.
-
-    assert ([[P]] C1 [[ex | fun s => post ex C1 P s]]).
-      intros s Ps. assumption.
-
-    assert ([[P]] C2 [[ex | fun s => post ex C2 P s]]).
-      intros s Ps. assumption.
-
-    pose proof (choice_left_inf _ _ _ C2 _ H0).
-    pose proof (choice_right_inf _ _ C1 _ _ H1).
-
-    pose proof (disjunction_inf _ _ _ _ _ _ H2 H3).
-    eapply consequence_inf; cycle 1.
-      apply H4.
-      intros s Qs. now apply hPost, H.
-      intros s Ps. now destruct Ps.
-  - (* iteration *) admit.
-Abort.
+  assert (DS_C1_ok : {{P}} denote C1 ok {{Mid}}).
+  {
+    intros s2 Hmid.
+    destruct Hmid. destruct H.
+    exists x. split; assumption. 
+  }  
+   
+  pose proof (IHC1 P Mid ok DS_C1_ok) as D_C1_ok.
+  
+  assert (DS_C2_er : {{Mid}} denote C2 er {{Qnm}}).
+  {
+    intros s3 HQnm.
+    destruct HQnm. destruct H0. destruct H0.
+    exists x. split; assumption.
+  }
+  
+  pose proof (IHC2 Mid Qnm er DS_C2_er) as D_C2_er.
+  
+  pose proof (SeqNormal P Mid Qnm C1 C2 er D_C1_ok D_C2_er) as D_nm.
+  
+  pose proof (Disjunction P Qsc P Qnm <{ C1;; C2 }> er D_sc D_nm) as D_or.
+  
+  eapply Consequence with
+  (P  := fun s => P s \/ P s)
+  (Q  := fun s => Qsc s \/ Qnm s).
+  
+  --- exact D_or.
+  --- intros s [Hp|Hp]; assumption.
+  --- intros s3 HQ.   destruct (DS s3 HQ) as (s1 & HP & Hseq). inversion Hseq; subst.
+  ---- left. split ; [exact HQ|]. exists s1. split; [exact HP | assumption]. 
+  ---- right. split; [exact HQ|]. destruct H2 as (s2 & Hc1ok & Hc2er). exists s2. split.  exists s1. split; assumption. exact Hc2er.
+  
+  -- evar (R : prop). 
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
