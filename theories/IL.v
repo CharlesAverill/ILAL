@@ -320,18 +320,34 @@ Theorem completeness :
   ---- left. split ; [exact HQ|]. exists s1. split; [exact HP | assumption]. 
   ---- right. split; [exact HQ|]. destruct H2 as (s2 & Hc1ok & Hc2er). exists s2. split.  exists s1. split; assumption. exact Hc2er.
   
-  -- evar (R : prop). 
+  -- set (Mid := fun s2 => exists s1, P s1 /\ [C1] ok |=> (s1, s2)).
+    set (Qnm := fun s3 => Q s3 /\ exists s2, Mid s2 /\ [C2] ok |=> (s2, s3)).
   
+   assert (DS_C1_ok : {{P}} denote C1 ok {{Mid}}).
+  {
+    intros s2 Hmid.
+    destruct Hmid. destruct H.
+    exists x. split; assumption. 
+  }  
   
+  assert (DS_C2_ok : {{Mid}} denote C2 ok {{Qnm}}).
+  {
+  intros s2 Hmid. 
+  destruct Hmid. destruct H0. destruct H0.
+  exists x. split. assumption.
+  auto.
+  }
   
-  
-  
-  
-  
-  
-  
-  
-  
+  specialize (IHC1 P Mid ok DS_C1_ok).
+  specialize (IHC2 Mid Qnm ok DS_C2_ok).
+  pose proof (SeqNormal P Mid Qnm C1 C2 ok IHC1 IHC2) as D_nm.
+  eapply Consequence with (Q := fun s => Qnm s).
+  --- exact D_nm. 
+  --- intro. trivial.
+  --- intros s3 HQ. destruct (DS s3 HQ). destruct H. unfold Qnm. split. auto. unfold Mid. invs H0. destruct H4. exists x0. split.
+  ---- destruct H0. exists x. split; assumption.
+  ---- destruct H0. assumption.
+  - 
   
   
   
