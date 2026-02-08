@@ -347,10 +347,8 @@ Theorem completeness :
   --- intros s3 HQ. destruct (DS s3 HQ). destruct H. unfold Qnm. split. auto. unfold Mid. invs H0. destruct H4. exists x0. split.
   ---- destruct H0. exists x. split; assumption.
   ---- destruct H0. assumption.
-  - 
-  
-  
-  
+  - admit.
+    
   
   
   
