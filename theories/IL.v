@@ -280,7 +280,7 @@ Theorem completeness :
   -- eapply Consequence with (Q := (fun s => exists x', P (s[i := x']))).
   --- apply NondetAssignmentOk.
   --- intros s Hp. exact Hp.
-  --- intros s Hq. destruct (DS s Hq). destruct H.
+  --- intros s Hq. destruct (DS s Hq). destruct H. invs H0. admit. 
   - destruct ex.
   -- set (Mid := fun s2 => exists s1, P s1 /\ [C1] ok |=> (s1, s2)).
   set (Qsc := fun s3 => Q s3 /\ exists s1, P s1 /\ [C1] er |=> (s1, s3)).
@@ -355,7 +355,37 @@ Theorem completeness :
   --- intros s3 HQ. destruct (DS s3 HQ). destruct H. unfold Qnm. split. auto. unfold Mid. invs H0. destruct H4. exists x0. split.
   ---- destruct H0. exists x. split; assumption.
   ---- destruct H0. assumption.
-  - admit.
+  - set (Mid1 := fun s2 => exists s1, P s1 /\ [C1] ex |=> (s1, s2)).
+  set (Mid2 := fun s2 => exists s1, P s1 /\ [C2] ex |=> (s1, s2)).
+  set (Or := fun s2 => Mid1 s2 \/ Mid2 s2).
+  
+  eapply Consequence with (Q := Or).
+  -- assert (DS_C1 : {{P}} denote <{ C1 }> ex {{Mid1}}). {
+    intros s H. destruct H. destruct H. unfold ds_post. exists x. split.
+    - assumption.
+    - unfold denote. exact H0.
+  }
+  assert (DS_C2 : {{P}} denote <{ C2 }> ex {{Mid2}}). {
+    intros s H. destruct H. destruct H. unfold ds_post. exists x. split.
+    - assumption.
+    - unfold denote. exact H0.
+  }
+  
+  specialize (IHC1 P Mid1 ex DS_C1).
+  specialize (IHC2 P Mid2 ex DS_C2).
+  assert (A1 : P, [C1 <+> C2] ex, Mid1). {
+    apply ChoiceLeft. assumption.
+  }
+  assert (A2 : P, [C1 <+> C2] ex, Mid2). {
+    apply ChoiceRight. assumption.
+  }
+  apply Disjunction.
+  --- exact A1.
+  --- exact A2.
+  -- intros s Hp. destruct Hp; assumption.
+  -- intros s Hq. destruct (DS s Hq). destruct H. invs H0; unfold Or.
+  --- left. unfold Mid1. exists x. split; assumption.
+  --- right. unfold Mid2. exists x. split; assumption.
   - admit.
   - destruct ex.
   -- eapply Consequence with (Q := P).
