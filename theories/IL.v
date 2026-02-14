@@ -272,7 +272,15 @@ Theorem completeness :
       --- apply AssignmentOk.
       --- intros s Hp. exact Hp.
       --- intros s Hq. destruct (DS s Hq). invs H. invs H1. admit. (** confused about definition for AssignmentOK **)
-  - admit. (** idem **)
+  - destruct ex.
+  -- eapply Consequence with (Q := (fun s => False)).
+  --- apply NondetAssignmentEr.
+  --- intros s Hp. exact Hp.
+  --- intros s Hq. destruct (DS s Hq). destruct H. invs H0.
+  -- eapply Consequence with (Q := (fun s => exists x', P (s[i := x']))).
+  --- apply NondetAssignmentOk.
+  --- intros s Hp. exact Hp.
+  --- intros s Hq. destruct (DS s Hq). destruct H.
   - destruct ex.
   -- set (Mid := fun s2 => exists s1, P s1 /\ [C1] ok |=> (s1, s2)).
   set (Qsc := fun s3 => Q s3 /\ exists s1, P s1 /\ [C1] er |=> (s1, s3)).
@@ -348,8 +356,23 @@ Theorem completeness :
   ---- destruct H0. exists x. split; assumption.
   ---- destruct H0. assumption.
   - admit.
-    
-  
-  
-  
-  
+  - admit.
+  - destruct ex.
+  -- eapply Consequence with (Q := P).
+  --- apply ErrorEr.
+  --- intros s Hp. exact Hp.
+  ---  intros s Hq. destruct (DS s Hq). destruct H. invs H0. exact H.
+  -- eapply Consequence with (Q := (fun s => False)). 
+  --- apply ErrorOk.
+  --- intros s Hp. exact Hp.
+  --- intros s Hq. destruct (DS s Hq). destruct H. inversion H0.
+  - destruct ex.
+  -- eapply Consequence with (Q := (fun s => False)).
+  --- apply AssumeEr.
+  --- intros s Hp. exact Hp.
+  --- intros s Hq. destruct (DS s Hq). destruct H. inversion H0.
+  -- eapply Consequence with (Q := (fun s => P s /\ p s)). 
+  --- apply AssumeOk.
+  --- intros s Hp. exact Hp.
+  --- intros s Hq. destruct (DS s Hq). destruct H. invs H0. auto.
+   
