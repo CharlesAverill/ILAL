@@ -1,5 +1,9 @@
 From ILAL Require Import language tactics.
 From Stdlib Require Import FunctionalExtensionality.
+From Stdlib Require Import NArith.
+
+Require Import Stdlib.Program.Equality.
+
 
 (** Triple definitions *)
 
@@ -206,9 +210,9 @@ Inductive derivable : prop -> stmt -> ExitCondition -> prop -> Prop :=
 | IterateNonzero P Q C e :
     P, [C** ;; C] e, Q ->
     P, [C**] e, Q
-| BackwardsVariant (P : N -> prop) C :
-    (forall n, P n, [C] ok, P (N.succ n)) ->
-    P 0, [C**] ok, (fun s => exists n', P n' s)
+| BackwardsVariant (P : nat -> prop) C :
+    (forall n, P n, [C] ok, P (S n)) ->
+    P O, [C**] ok, (fun s => exists n', P n' s)
 | ChoiceLeft P Q C1 C2 e:
     P, [C1] e, Q ->
     P, [C1 <+> C2] e, Q
@@ -234,6 +238,48 @@ Inductive derivable : prop -> stmt -> ExitCondition -> prop -> Prop :=
     P, [x := nondet()] er, False
 
 where "P , [ c ] ec , Q" := (derivable P c ec Q).
+
+Fixpoint nRepeat (s : stmt) (n : nat) :=
+match n with
+| O => Skip
+| S n' => <{ (nRepeat s n') ;; s }>
+end.
+
+Lemma repeat_is_star (C : stmt) : forall P ex s, ds_post (denote <{ C** }> ex) P s -> (exists n, ds_post (denote (nRepeat C n) ex) P s). 
+Proof.
+  intros P ex s H.
+  unfold ds_post in H.
+  destruct H.
+  unfold denote in H.
+  destruct H.
+
+
+  assert (Hexec : exists n, [nRepeat C n] ex |=> (x, s)).
+  {
+    dependent induction H0.
+    - (* EStar0: 0 iterations *)
+      exists 0%nat. simpl. constructor.
+    - assert (eq_cstar :  <{ C ** }> = <{ C ** }>). { reflexivity. }
+    assert (eq_s:  (x, s2) = (x, s2)). { reflexivity. }
+    specialize (IHds1 C s2 x H eq_cstar eq_s). invs IHds1.
+    exists (S x0).
+    simpl. apply ESeqOk. exists s2.
+    split ; assumption.      
+    - (* EStarEr: error happens (possibly after 0 ok-iterations; this constructor is “immediate”) *)
+      exists 1%nat. simpl.
+      (* nRepeat C 1 = Skip ;; C *)
+      apply ESeqOk.
+      exists x. split.
+      + constructor.  (* ESkipOk *)
+      + assumption.
+  }
+
+  destruct Hexec as [n Hn].
+  exists n.
+  unfold ds_post.
+  exists x. split. exact H.
+  unfold denote. exact Hn.
+Qed.
 
 Theorem soundness :
   forall C P Q ex,
@@ -386,7 +432,31 @@ Theorem completeness :
   -- intros s Hq. destruct (DS s Hq). destruct H. invs H0; unfold Or.
   --- left. unfold Mid1. exists x. split; assumption.
   --- right. unfold Mid2. exists x. split; assumption.
-  - admit.
+  - set (p := fun n => ((ds_post (denote (nRepeat C n) ex) P))). 
+  eapply Consequence with (Q := fun s => exists n, (p n) s). 
+  -- destruct ex. 
+  --- admit.
+  --- eapply BackwardsVariant with (P := p).
+  intro n.
+  assert (DS_C : {{p n}} denote C ok {{p (S n)}}).
+  {
+  intros x Hp.
+  invs Hp. destruct H. invs H0. invs H4. destruct H0. destruct n.
+  - simpl in H0. invs H0. unfold p. simpl. unfold ds_post. exists x1. split. 
+  -- exists x1. split. assumption. simpl. constructor.
+  -- unfold denote. assumption.
+  - simpl in H0. unfold p. simpl. unfold ds_post. exists x1. split.
+  -- exists x0. split. assumption. simpl. exact H0.
+  -- simpl. exact H1.
+  } 
+  
+  specialize (IHC (p n) (p (S n)) ok DS_C).
+  assumption.
+  -- intros s H. destruct H. destruct H. invs H0. assumption.
+  -- intros s H.
+  unfold under_approximate in DS. specialize (DS s H). invs DS. invs H0.
+  unfold p. apply repeat_is_star. unfold ds_post. exists x ; auto.
+ 
   - destruct ex.
   -- eapply Consequence with (Q := P).
   --- apply ErrorEr.
