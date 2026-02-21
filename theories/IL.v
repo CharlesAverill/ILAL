@@ -285,13 +285,46 @@ Theorem soundness :
   forall C P Q ex,
     P, [C] ex, Q ->
     {{P}} denote C ex {{Q}}.
-    Proof. 
-    intros. induction H.
-    - unfold under_approximate. intros. contradiction.
-    - apply (impl_symmetry P P' Q Q'); auto.
-    - admit.
-   Abort.
-
+Proof.
+  intros. induction H;
+    try solve [
+      (intros s Qs; contradiction)
+    ];
+    try rename IHderivable1 into IH1;
+    try rename IHderivable2 into IH2;
+    try rename IHderivable into IH.
+  - now apply (impl_symmetry P P' Q Q').
+  - intros s Qs. destruct Qs.
+    -- (* Q1 s *)
+       destruct (IH1 _ H1) as (s' & P1s' & DS).
+       exists s'. split. now left. assumption.
+    -- (* Q2 s *)
+       destruct (IH2 _ H1) as (s' & P2s' & DS).
+       exists s'. split. now right. assumption.
+  - intros s Qs. exists s. split. assumption. constructor.
+  - intros s Rs. destruct (IH _ Rs) as (s' & Ps' & DS).
+    exists s'. split. assumption. now constructor.
+  - intros s Rs. destruct (IH2 _ Rs) as (s' & Qs' & DS).
+    destruct (IH1 _ Qs') as (s'' & Ps'' & DS').
+    exists s''. split. assumption. constructor.
+    exists s'. split. assumption. assumption.
+  - intros s Ps. exists s. split. assumption. constructor.
+  - intros s Ps. destruct (IH _ Ps) as (s' & Qs' & DS). invs DS.
+    exists s'. split. assumption. assumption.
+    destruct H3 as (s'' & DS1 & DS2). exists s'. split. assumption.
+    econstructor; eassumption.
+  - admit.
+  - intros s Qs. destruct (IH _ Qs) as (s' & Ps' & DS). exists s'.
+    split. assumption. now constructor.
+  - intros s Qs. destruct (IH _ Qs) as (s' & Ps' & DS). exists s'.
+    split. assumption. now constructor.
+  - intros s Qs. exists s. split. assumption. constructor.
+  - intros s (Ps & Bs). exists s. split. assumption. now constructor.
+  - intros s (x' & Ps & Eq). eexists. split. eassumption.
+    unfold denote. admit. (* Wrong direction? *)
+  - intros s (x' & Ps). eexists. split. eassumption.
+    unfold denote. admit. (* Wrong direction again *)
+Abort.
 
 Theorem completeness :
   forall C P Q ex,
@@ -475,4 +508,4 @@ Theorem completeness :
   --- apply AssumeOk.
   --- intros s Hp. exact Hp.
   --- intros s Hq. destruct (DS s Hq). destruct H. invs H0. auto.
-   
+Abort.
