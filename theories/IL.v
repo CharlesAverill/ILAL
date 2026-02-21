@@ -313,7 +313,10 @@ Proof.
     exists s'. split. assumption. assumption.
     destruct H3 as (s'' & DS1 & DS2). exists s'. split. assumption.
     econstructor; eassumption.
-  - admit.
+  - intros s (j & Ps). revert s Ps. induction j; intros.
+      exists s. split. assumption. constructor.
+    specialize (H0 _ _ Ps). destruct H0 as (s' & Pjs' & DS).
+    specialize (IHj s' Pjs'). admit. (* Seems fake *)
   - intros s Qs. destruct (IH _ Qs) as (s' & Ps' & DS). exists s'.
     split. assumption. now constructor.
   - intros s Qs. destruct (IH _ Qs) as (s' & Ps' & DS). exists s'.
