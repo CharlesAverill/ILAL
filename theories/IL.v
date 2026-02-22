@@ -281,6 +281,20 @@ Proof.
   unfold denote. exact Hn.
 Qed.
 
+Theorem strong_induction:
+  forall P : nat -> Prop,
+    (forall n : nat, (forall k : nat, (k < n -> P k)) -> P n)%nat ->
+    forall n : nat, P n.
+Proof.
+  intros.
+  assert (forall m, m <= n -> P m)%nat. {
+    induction n. intros. invs H0. apply H. intros. invs H0.
+    intros. invs H0. apply H. intros. apply IHn. invs H0. reflexivity. transitivity (S k); auto.
+    apply IHn, H2.
+  } apply H. intros.
+  now apply H0, PeanoNat.Nat.lt_le_incl.
+Qed.
+
 Theorem soundness :
   forall C P Q ex,
     P, [C] ex, Q ->
