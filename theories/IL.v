@@ -1,9 +1,7 @@
 From ILAL Require Import language tactics.
 From Stdlib Require Import FunctionalExtensionality.
 From Stdlib Require Import NArith.
-
-Require Import Stdlib.Program.Equality.
-
+From Stdlib Require Import Program.Equality.
 
 (** Triple definitions *)
 
@@ -281,20 +279,6 @@ Proof.
   unfold denote. exact Hn.
 Qed.
 
-Theorem strong_induction:
-  forall P : nat -> Prop,
-    (forall n : nat, (forall k : nat, (k < n -> P k)) -> P n)%nat ->
-    forall n : nat, P n.
-Proof.
-  intros.
-  assert (forall m, m <= n -> P m)%nat. {
-    induction n. intros. invs H0. apply H. intros. invs H0.
-    intros. invs H0. apply H. intros. apply IHn. invs H0. reflexivity. transitivity (S k); auto.
-    apply IHn, H2.
-  } apply H. intros.
-  now apply H0, PeanoNat.Nat.lt_le_incl.
-Qed.
-
 Theorem soundness :
   forall C P Q ex,
     P, [C] ex, Q ->
@@ -340,10 +324,13 @@ Proof.
     split. assumption. now constructor.
   - intros s Qs. exists s. split. assumption. constructor.
   - intros s (Ps & Bs). exists s. split. assumption. now constructor.
-  - intros s (x' & Ps & Eq). eexists. split. eassumption. unfold denote. admit.
-  - intros s (x' & Ps). eexists. split. eassumption.
-    unfold denote. admit. (* Wrong direction again *)
-Abort.
+  - intros s (x' & Ps & Eq). exists (s[x := x']). split. assumption.
+    replace s with (s[x := x'][x := e (s[x := x'])]) at 2. constructor.
+    now rewrite update_shadow, <- Eq, state_upd_eq.
+  - intros s (x' & Ps). exists (s[x := x']). split. assumption.
+    replace s with (s[x := x'][x := s x]) at 2. constructor.
+    now rewrite update_shadow, state_upd_eq.
+Qed.
 
 Theorem completeness :
   forall C P Q ex,
