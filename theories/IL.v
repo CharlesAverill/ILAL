@@ -386,11 +386,11 @@ Proof.
     -- intros s Hq. destruct (DS s Hq) as (s' & Ps' & DS'). invs DS'.
        + left. now exists s'.
        + right. now exists s'.
- - set (p := fun n => ((ds_post (denote (nRepeat C n) ex) P))). 
-   eapply Consequence with (Q := fun s => exists n, (p n) s).
-   -- destruct ex.
-      + admit.
-      + eapply BackwardsVariant with (P := p). intros.
+ - set (p := fun n => ((ds_post (denote (nRepeat C n) ok) P))). 
+   set (post := fun s => exists n, (p n) s).
+   assert (Hok : P, [C **] ok, post). {
+        eapply Consequence with (Q := post).
+        - apply BackwardsVariant with (P := p). intros.
         assert (DS_C: {{p n}} denote C ok {{p (S n)}}). {
           intros s Psn. invs Psn. destruct H as (Px & DS'). invs DS'.
           destruct H2 as (s2 & DS1 & DS2). destruct n.
@@ -399,9 +399,39 @@ Proof.
           unfold p. simpl in *. exists s2. split.
             exists x. split; assumption.
           assumption. } apply (IHC (p n) (p (S n)) ok DS_C).
-   -- intros s (? & ? & ?). invs H0. assumption.
-   -- intros s Qs. specialize (DS s Qs). invs DS. destruct H as (Px & DRS).
-      unfold p. apply repeat_is_star. now exists x.
+         - intros s Hs. invs Hs. destruct H. invs H0. assumption.
+         - intros s Hs. assumption.
+   }
+   -- destruct ex.
+      + assert (e : forall n s x, [nRepeat C n] ok |=> (x, s) -> [C**] ok |=> (x, s)).
+        {
+          intro n. induction n ; intros s x Hp.
+          - invs Hp. constructor.
+          - invs Hp. invs H2. destruct H. specialize (IHn x0 x H). apply EStarOk with (s2 := x0); assumption.
+        }
+      
+      assert (Hpost :  {{P}} denote <{ C ** }> ok {{ post }}).
+      {
+        intros s Hp. invs Hp. invs H. invs H0. simpl in H1. exists x0. split. assumption. simpl. specialize (e x s x0 H1). assumption.
+      } 
+       
+      assert (Herr : {{post}} denote <{ C }> er {{Q}}).
+      {
+        intros s Hq. specialize (DS s Hq). apply repeat_is_star in DS. invs DS. invs H. destruct H0. simpl in H0. induction x.
+        - exists x0. split; invs H0. 
+        - invs H0. 
+        -- auto.
+        -- invs H4. destruct H0. assert (px1 : post x1). exists x. exists x0. split; assumption. exists x1. split; assumption.
+      }    
+            
+      eapply IterateNonzero. apply SeqNormal with (Q := post).
+        * specialize (IHC P post ok). assumption.
+        * specialize (IHC post Q er Herr). assumption.
+      + eapply Consequence with (Q := post). 
+        * exact Hok. 
+        * intros s Hs. assumption.
+        * intros s Qs. specialize (DS s Qs). invs DS. destruct H as (Px & DRS).
+      unfold post. apply repeat_is_star. now exists x.
   - destruct ex.
     -- eapply Consequence. apply ErrorEr. intros s Ps. apply Ps.
        intros s Qs. destruct (DS s Qs) as (s' & Ps' & DS'). now invs DS'.
@@ -412,7 +442,7 @@ Proof.
        intros s Qs. destruct (DS s Qs) as (s' & Ps' & DS'). invs DS'.
     -- eapply Consequence with (Q := (fun s => P s /\ p s)). apply AssumeOk. intros s Ps. apply Ps.
        intros s Qs. destruct (DS s Qs) as (s' & Ps' & DS'). now invs DS'.
-Admitted.
+Qed.
 
 Theorem equivalence : forall P C Q ex, interpret_spec P C Q ex.
 Proof.
