@@ -10,7 +10,7 @@ It will eventually contain an encoding of [Adversarial Logic](https://dl.acm.org
     This proof was relatively simple once an apt encoding of the denotational semantics presented in the paper was found.
     There are some slight differences in the DS presented here: primarily the rules for `C*`, which have been expanded from one
     computational definition in the paper to two base rules for `ok` and `er` executions, and one inductive rule.
-- [ ] Completeness of IL
+- [x] Completeness of IL
 - [ ] Encoding AL triples and inference rules
 - [ ] Soundness of AL
 - [ ] Completeness of AL
