@@ -1,4 +1,4 @@
-From ILAL Require Import language tactics.
+From ILAL Require Import IL.language tactics.
 From Stdlib Require Import NArith.
 From Stdlib Require Import Program.Equality.
 

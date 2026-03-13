@@ -14,7 +14,7 @@
 (maintainers
  "Charles Averill <charles@utdallas.edu>")
 
-(license GPL-3.0)
+(license MIT)
 
 (documentation https://github.com/CharlesAverill/ILAL)
 

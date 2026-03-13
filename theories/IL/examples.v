@@ -1,4 +1,4 @@
-From ILAL Require Import language.
+From ILAL Require Import IL.language.
 
 (* Examples from the incorrectness logic paper *)
 

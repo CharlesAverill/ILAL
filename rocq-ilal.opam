@@ -5,7 +5,7 @@ description:
   "Encodings of Incompleteness Logic and Adversarial Logic in Rocq"
 maintainer: ["Charles Averill <charles@utdallas.edu>"]
 authors: ["Charles Averill <charles@utdallas.edu>"]
-license: "GPL-3.0"
+license: "MIT"
 homepage: "https://github.com/CharlesAverill/ILAL"
 doc: "https://github.com/CharlesAverill/ILAL"
 bug-reports: "https://github.com/CharlesAverill/ILAL/issues"
