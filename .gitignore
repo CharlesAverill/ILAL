@@ -24,3 +24,4 @@ Makefile.coq.conf
 *.cache
 .vscode
 *.crashrocqide
+AL_paper

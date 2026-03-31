@@ -153,3 +153,75 @@ Proof.
     apply HUO, Hs'.
     assumption.
 Qed.
+
+Reserved Notation
+  "P , [[ c ]] m , Q"
+  (at level 40, c custom al_stmt at level 99).
+Inductive derivable: aprop -> astmt -> mode -> aprop -> Prop :=
+| Unit P m:
+  P, [[skip]] m, P
+| Consequence P P' Q Q' c m :
+  P, [[c]] m, Q ->
+  P ->> P' ->
+  Q' ->> Q ->
+  P', [[c]] m, Q'
+(**  Not sure if assume should be B sig or B sig.(a/vstate).(s)**)
+| AssumeOk P B :
+  P, [[assume(B)]] Ok, (fun sig => P sig /\ B sig.(vstate).(s))
+| AssumeAd P B :
+  P, [[assume(B)]] Ad, (fun sig => P sig /\ B sig.(astate).(s))
+| Disjunction P1 Q1 P2 Q2 c m :
+  P1, [[c]] m, Q1 ->
+  P2, [[c]] m, Q2 ->
+  (fun s => P1 s \/ P2 s), [[c]] m, (fun s => Q1 s \/ Q2 s)
+| Seq P Q R c1 c2 m :
+  P, [[c1]] m, Q -> 
+  Q, [[c2]] m, R ->
+  P, [[c1 ;; c2]] m, R
+| ChoiceLeft P Q c1 c2 m:
+  P, [[c1]] m, Q ->
+  P, [[c1 <+> c2]] m, Q
+| ChoiceRight P Q c1 c2 m:
+  P, [[c2]] m, Q ->
+  P, [[c1 <+> c2]] m, Q
+| IterateZero P c m:
+  P, [[c**]] m, P
+| IterateNonzero P Q c m :
+  P, [[c** ;; c]] m, Q ->
+  P, [[c**]] m, Q
+| LocalOk P x (e : expression):
+  P, [[x := e]] Ok, (fun sig => exists x', P (sig[[x :=v x' (sig.(vstate).(s))]]) /\ (sig.(vstate).(s) x) = e (sig[[x :=v x' (sig.(vstate).(s))]]).(vstate).(s))
+| LocalAd P x (e : expression):
+  P, [[x := e]] Ad, (fun sig => exists x', P (sig[[x :=a x' (sig.(astate).(s))]]) /\ (sig.(astate).(s) x) = e (sig[[x :=a x' (sig.(astate).(s))]]).(astate).(s))
+| ReadV P (ss x : id):
+  P, [[ read(ss, x) ]] Ok, (fun sig => exists (v : N) x' s', P ((sig[[x :=v x' (sig.(vstate).(s))]]) [[ss :=vch s' (sig.(vstate).(ch))]])
+                                                            /\ s' (sig.(vstate).(ch)) = v :: sig.(vstate).(ch) ss
+                                                            /\ sig.(vstate).(s) x = v)
+| ReadA P (ss x : id):
+  P, [[ read(ss, x) ]] Ad, (fun sig => exists (v : N) x' s', P ((sig[[x :=a x' (sig.(astate).(s))]]) [[ss :=ach s' (sig.(astate).(ch))]])
+                                                            /\ s' (sig.(astate).(ch)) = v :: sig.(astate).(ch) ss
+                                                            /\ sig.(astate).(s) x = v)
+| WriteV P (ss x : id):
+  P, [[ write(ss, x) ]] Ok, (fun sig => exists (v : N) s', P (sig[[ss :=vch s' (sig.(vstate).(ch))]])
+                                                          /\ sig.(vstate).(ch) ss = v :: s' (sig.(vstate).(ch))
+                                                          /\ sig.(vstate).(s) x = v)
+| WriteA P (ss x : id):
+  P, [[ write(ss, x) ]] Ok, (fun sig => exists (v : N) s', P (sig[[ss :=ach s' (sig.(astate).(ch))]])
+                                                          /\ sig.(astate).(ch) ss = v :: s' (sig.(astate).(ch))
+                                                          /\ sig.(astate).(s) x = v)
+| ParL P1 c1 Q1 P2 c2 Q2 m1 m2:
+  P1, [[c1]] m1, Q1 ->
+  P2, [[c2]] m2, Q2 ->
+  P1, [[c1 <||> c2]] m1, Q1 
+| ParR P1 c1 Q1 P2 c2 Q2 m1 m2:
+  P1, [[c1]] m1, Q1 ->
+  P2, [[c2]] m2, Q2 ->
+  P2, [[c1 <||> c2]] m2, Q2 
+(** I think this is the literal interpretation from the paper (for ok->ad and ad->ok only) as [P][A] c1 || c2 [Q][B] is defined as [P] c1 || c2 [Q] /\ [A] c1 || c2 [B] **)
+| ComVA_V P c1 A c2 (ss : id):
+  P, [[c1 <||> c2]] Ok, (fun sig => exists v s', (P (sig[[ss :=vch s' (sig.(vstate).(ch))]]) /\ s' (sig.(vstate).(ch)) = v :: sig.(vstate).(ch) ss /\ A (sig[[ss :=ach s' (sig.(astate).(ch))]]) /\ sig.(astate).(ch) ss = v :: s' (sig.(astate).(ch))))
+
+
+
+  
+where "P , [[ c ]] m , Q" := (derivable P c m Q).
