@@ -125,7 +125,13 @@ Bind Scope prop_scope with prop.
 Delimit Scope prop_scope with prop.
 Open Scope prop_scope.
 
-Notation assert P := (P%prop : prop).
+Definition aprop : Type := estate -> Prop.
+
+Definition aprop_impl (P Q : aprop) : Prop :=
+  forall s, P s -> Q s.
+Notation "P ->> Q" := (aprop_impl P Q) (at level 80).
+
+Notation assert P := (P%prop : aprop).
 
 Notation "~ P" := (fun st => ~ assert P st) (in custom al_stmt at level 0, P constr at level 0) : prop_scope.
 Notation "P /\ Q" := (fun st => assert P st /\ assert Q st) : prop_scope.

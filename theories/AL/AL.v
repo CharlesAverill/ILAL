@@ -5,12 +5,6 @@ Import ListNotations.
 Open Scope N_scope.
 Open Scope string_scope.
 
-Definition aprop : Type := estate -> Prop.
-
-Definition aprop_impl (P Q : aprop) : Prop :=
-  forall s, P s -> Q s.
-Notation "P ->> Q" := (aprop_impl P Q) (at level 80).
-
 (** Denotational Relational Semantics *)
 (* Table 8 *)
 
@@ -23,7 +17,7 @@ Inductive mode : Set := Ok | Ad.
 
 Reserved Notation
   "[[ c ]] m |=> ( s , s' )"
-  (at level 40, c custom al_stmt at level 99,
+  (at level 0, c custom al_stmt at level 99,
    m constr, s constr, s' constr).
 
 Open Scope al_scope.
@@ -90,16 +84,36 @@ Definition under_approximate (P : aprop) (c : astmt) (m : mode) (Q : aprop) : Pr
 
 Notation "{{ P }} c [[ m ]] {{ Q }}" :=
   (under_approximate P c m Q)
-  (at level 90, c custom al_stmt at level 99, m constr) : al_ds_scope.
+  (at level 90, c custom al_stmt at level 99, m constr) : al_scope.
 
 Definition over_approximate (P : aprop) (c : astmt) (m : mode) (Q : aprop) : Prop :=
   forall s, post (ds c m) P s -> Q s.
 
 Notation "<| P |> c [[ m ]] <| Q |>" :=
   (over_approximate P c m Q)
-  (at level 90, c custom al_stmt at level 99, m constr) : al_ds_scope.
+  (at level 90, c custom al_stmt at level 99, m constr) : al_scope.
+
+(* Definition 2 *)
+
+Definition aprop2 : Type := estate -> estate -> Prop.
+
+Definition al_post2 (c1 c2 : astmt) (P A : aprop) : aprop2 :=
+  fun sq sb =>
+    exists sp sa, P sp /\ A sa /\
+      ds c1 Ok (sp, sq) /\ ds c2 Ad (sa, sb).
+
+(* The under-approximate adversarial triple [p][a] c1 || c2 [q][b] *)
+Definition al_under2 (P A : aprop) (c1 c2 : astmt) (Q B : aprop) : Prop :=
+  forall sq sb, Q sq /\ B sb ->
+    al_post2 c1 c2 P A sq sb.
+
+Notation "<[[ P ]][[ A ]] c1 || c2 [[ Q ]][[ B ]]>" :=
+  (al_under2 P A c1 c2 Q B)
+  (at level 90, c1 custom al_stmt at level 99, c2 custom al_stmt at level 99) : al_scope.
 
 Open Scope al_scope.
+
+(* Definition 3 *)
 
 Theorem and_or_symmetry : forall P Q1 Q2 c m,
   ({{ P }} c [[m]] {{ Q1 }} /\ {{ P }} c [[m]] {{ Q2 }}) <->
@@ -225,3 +239,21 @@ Inductive derivable: aprop -> astmt -> mode -> aprop -> Prop :=
 
   
 where "P , [[ c ]] m , Q" := (derivable P c m Q).
+(* Lemma 1 *)
+
+Lemma characterization :
+  forall P Q A B C1 C2,
+  <[[P]][[A]] C1 || C2 [[Q]][[B]]> <->
+  (forall sq sb, Q sq -> B sb ->
+    exists sp sa, P sp /\ A sa /\
+     ds C1 Ok (sp, sq) /\ ds C2 Ad (sa, sb)).
+Proof.
+  intros. unfold al_under2, al_post2. split; intro; intros.
+  - specialize (H _ _ (conj H0 H1)). destruct H as (sq' & sb' & HQ & HB & DS1 & DS2).
+    exists sq', sb'. now repeat split.
+  - destruct H0. specialize (H _ _ H0 H1). destruct H as (sq' & sb' & HQ & HB & DS1 & DS2).
+    exists sq', sb'. now repeat split.
+Qed.
+
+(** Proof rules *)
+(* Page 9 *)
