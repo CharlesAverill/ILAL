@@ -12,7 +12,7 @@ It will eventually contain an encoding of [Adversarial Logic](https://dl.acm.org
     computational definition in the paper to two base rules for `ok` and `er` executions, and one inductive rule.
 - [x] [Completeness of IL](https://github.com/CharlesAverill/ILAL/blob/93bb97003367773398b2e0bb63fadc2d94ee66cc/theories/IL.v#L293)
 - [x] [Encoding AL triples and inference rules](https://github.com/CharlesAverill/ILAL/blob/1c0f1880b984bbf06635f1df83ff888c4125724b/theories/AL/AL.v#L30)
-- [ ] Soundness of AL
+- [x] [Soundness of AL](https://github.com/CharlesAverill/ILAL/blob/b13df28fc083bd4b0f3700cd24e03e871112dcb1/theories/AL/AL.v#L504)
 - [ ] Completeness of AL
 
 ## Building
