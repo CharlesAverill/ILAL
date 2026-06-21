@@ -75,12 +75,14 @@ Inductive astmt : Type :=
 Open Scope al_scope.
 
 Notation "<{ e }>" := e (e custom al_stmt_aux) : al_scope.
-Notation "e" := e
-  (in custom al_stmt_aux at level 0, e custom al_stmt) : al_scope.
-Notation "x" := x
-  (in custom al_stmt at level 0, x constr at level 0) : al_scope.
-Notation "( x )" := x
-  (in custom al_stmt, x at level 99) : al_scope.
+Notation "e" := e (in custom al_stmt_aux at level 0, e custom al_stmt) : al_scope.
+Notation "x" := x (in custom al_stmt at level 0, x constr at level 0) : al_scope.
+Notation "( x )" := x (in custom al_stmt, x at level 99) : al_scope.
+(* Notation "f x .. y" := (.. (f x) .. y)
+                  (in custom al_stmt at level 0, only parsing,
+                  f constr at level 0, x constr at level 9,
+                  y constr at level 9) : al_scope. *)
+(* Notation "'fun' s '=>' e" := (fun s => e) (in custom al_stmt at level 0, only parsing, s constr, e constr) : al_scope. *)
 
 Notation "'skip'" := ASkip
   (in custom al_stmt at level 0) : al_scope.
@@ -133,7 +135,7 @@ Notation "P ->> Q" := (aprop_impl P Q) (at level 80).
 
 Notation assert P := (P%prop : aprop).
 
-Notation "~ P" := (fun st => ~ assert P st) (in custom al_stmt at level 0, P constr at level 0) : prop_scope.
+Notation "~ P" := (fun st => ~ assert P st) (in custom al_stmt at level 0) : prop_scope.
 Notation "P /\ Q" := (fun st => assert P st /\ assert Q st) : prop_scope.
 Notation "P \/ Q" := (fun st => assert P st \/ assert Q st) : prop_scope.
 Notation "P -> Q" := (fun st => assert P st -> assert Q st) : prop_scope.
