@@ -19,7 +19,7 @@ It will eventually contain an encoding of [Adversarial Logic](https://dl.acm.org
 
 ```bash
 # Install Dependencies
-opam switch create rocq 4.14.1
+opam switch create rocq 4.14.2
 opam pin add rocq-runtime 9.1.0
 opam install rocq-prover dune
 

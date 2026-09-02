@@ -526,7 +526,7 @@ Proof.
     exists s'. auto using EDChoiceR.
   - (* DIterZero *) intros s Ps. exists s. split. assumption. constructor.
   - (* DIterNonzero *) intros s Qs. destruct (IHderivable s Qs) as (s' & Ps' & DS).
-    exists s'. auto using star_equiv.
+    exists s'. split. assumption. now apply star_equiv.
   - (* DBackwardVariant *)
     assert (Aux : forall n sig, P n sig ->
               exists sig', P O sig' /\ [[ c** ]] m |=> (sig', sig)). {
@@ -537,7 +537,7 @@ Proof.
         exists sig0. split. assumption. econstructor; eassumption.
     }
     intros sig (n & Pnsig). destruct (Aux n sig Pnsig) as (sig' & P0 & DStar).
-    exists sig'. auto.
+    exists sig'. now split.
   - (* DAssume *) intros sig (Psig & Bsig).
     exists sig. split. assumption. constructor. apply Bsig.
   - (* DAssign *) intros sig (x' & Psig & Eq).
@@ -797,14 +797,6 @@ Proof. intros. apply update_eq. Qed.
 Lemma vstore_vupd_eq : forall sig x v, (sig[[ x :=v v ]]).(vstate).(s) x = v.
 Proof. intros. apply update_eq. Qed.
 
-(* Raw-notation "different key"/"other record" store-read independence
-   lemmas, completing the cross-product ({vstate,astate}.s reads against
-   {[[:=v]],[[:=a]],[[:=vch]],[[:=ach]]} raw updates) that [vch_neq]/[ach_neq]
-   and [vstore_vchan_upd]/[astore_achan_upd] leave uncovered.  Needed once a
-   store read has to be traced back through a MIX of raw-notation updates
-   (as produced by chaining [D2Com]/[D2ComAP] postconditions without a [set]
-   to name each intermediate state) rather than the [mode_upd]/[mode_chan_upd]
-   function forms the [astore_mode_upd_Ok]-family already covers. *)
 Lemma vstore_vupd_neq : forall sig x y v,
   y <> x -> (sig[[ y :=v v ]]).(vstate).(s) x = sig.(vstate).(s) x.
 Proof.

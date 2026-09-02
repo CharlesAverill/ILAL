@@ -24,4 +24,4 @@
  (description "Encodings of Incompleteness Logic and Adversarial Logic in Rocq")
  (depends
    (dune (>= 3.21.0))
-   (rocq (>= 9.0.0))))
+   (rocq (>= 9.1.0))))
