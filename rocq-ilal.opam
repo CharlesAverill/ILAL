@@ -11,7 +11,7 @@ doc: "https://github.com/CharlesAverill/ILAL"
 bug-reports: "https://github.com/CharlesAverill/ILAL/issues"
 depends: [
   "dune" {>= "3.21" & >= "3.21.0"}
-  "rocq" {>= "9.0.0"}
+  "rocq" {>= "9.1.0"}
   "odoc" {with-doc}
 ]
 build: [
