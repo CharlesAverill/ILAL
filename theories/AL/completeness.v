@@ -102,7 +102,40 @@ induction c as [ | x e | x | c1 IH1 c2 IH2 | c1 IH1 c2 IH2 | B
     exists s2. split. exists s1. now split. assumption.
     
     assumption.
-  -  
+  - set (Mid1 := fun s2 => exists s1, P s1 /\ [[c1]] m |=> (s1, s2)).
+    set (Mid2 := fun s2 => exists s1, P s1 /\ [[c2]] m |=> (s1, s2)).
+    set (Or := fun s2 => Mid1 s2 \/ Mid2 s2).
+
+    eapply DConsequence with (Q := Or).
+    
+    -- shelve.
+    -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & DS'). invs DS'.
+      --- left. now exists s'.
+      --- right. now exists s'.
+    -- assert (DS_C1 : {{P}} c1  [[m]] {{Mid1}}).
+         intros s (s' & Ps' & DS'). now exists s'.
+
+        assert (DS_C2 : {{P}} c2  [[m]] {{Mid2}}).
+         intros s (s' & Ps' & DS'). now exists s'.
+
+       specialize (IH1 P Mid1 m DS_C1).
+       specialize (IH2 P Mid2 m DS_C2).
+
+       assert (A1 : P, [c1 <||> c2] m, Mid1) by now constructor.
+       assert (A2 : P, [c1 <||> c2] m, Mid2) by now constructor.
+
+      constructor; eassumption.
+
+      Unshelve. intros s Ps. invs Ps; assumption.
+
+    - eapply DConsequence with (Q := aand_lift m P B).
+      -- intros s Ps. exact Ps.
+      -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & DS'). invs DS'. now split.
+      -- constructor.
+    -  
+ 
+
+
 
 
 
