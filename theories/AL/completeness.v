@@ -132,7 +132,44 @@ induction c as [ | x e | x | c1 IH1 c2 IH2 | c1 IH1 c2 IH2 | B
       -- intros s Ps. exact Ps.
       -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & DS'). invs DS'. now split.
       -- constructor.
-    -  
+    - set (Pn := fun n => post (ds (aRepeat c n) m) P).
+      eapply DConsequence with (P := Pn O) (Q := fun sig => exists n, Pn n sig).
+      -- intros s Ps. destruct Ps as (s0 & ps0 & D). now invs D.
+      -- intros s Qs. apply (arepeat_is_star c m P s (DS s Qs)).
+      -- apply DBackwardVariant. intros n. apply IH. intros s Ps. destruct Ps as (s0 & ps0 & D).
+      invs D. exists s2. split. now exists s0. assumption.
+    - set (Mid1 := fun s2 => exists s1, P s1 /\ [[c1]] m |=> (s1, s2)).
+      set (Mid2 := fun s2 => exists s1, P s1 /\ [[c2]] m |=> (s1, s2)).
+      set (Or := fun s2 => Mid1 s2 \/ Mid2 s2).
+
+      eapply DConsequence with (Q := Or).
+      
+      -- shelve.
+      -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & DS'). invs DS'.
+        --- left. now exists s'.
+        --- right. now exists s'.
+      -- assert (DS_C1 : {{P}} c1  [[m]] {{Mid1}}).
+          intros s (s' & Ps' & DS'). now exists s'.
+
+          assert (DS_C2 : {{P}} c2  [[m]] {{Mid2}}).
+          intros s (s' & Ps' & DS'). now exists s'.
+
+        specialize (IH1 P Mid1 m DS_C1).
+        specialize (IH2 P Mid2 m DS_C2).
+
+        assert (A1 : P, [c1 <+> c2] m, Mid1) by now constructor.
+        assert (A2 : P, [c1 <+> c2] m, Mid2) by now constructor.
+
+        constructor; eassumption.
+
+        Unshelve. intros s Ps. invs Ps; assumption.
+    - eapply DConsequence with (Q := fun sig => exists v x' l,
+            P (mode_chan_upd m (mode_upd m sig x x') chn (v :: l))
+            /\ mode_chan m sig chn = l
+            /\ mode_store m sig x = v).
+    -- intros s Ps. exact Ps.
+    -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H.
+     
  
 
 
