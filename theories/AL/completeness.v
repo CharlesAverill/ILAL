@@ -167,16 +167,52 @@ induction c as [ | x e | x | c1 IH1 c2 IH2 | c1 IH1 c2 IH2 | B
             P (mode_chan_upd m (mode_upd m sig x x') chn (v :: l))
             /\ mode_chan m sig chn = l
             /\ mode_store m sig x = v).
-    -- intros s Ps. exact Ps.
-    -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H.
+      -- intros s Ps. exact Ps.
+      -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H. 
+        --- exists v, (s'.(vstate).(s) x), l. destruct s' as [ [vs vc] a]. simpl in *.
+        unfold update_vchannel, update_victim,
+               update_achannel, update_adversary in *; simpl in *. split. rewrite !update_shadow, !state_upd_eq; auto. split; rewrite update_eq; reflexivity.
+        --- exists v, (s'.(astate).(s) x), l. destruct s' as [ vs [as0 ac] ]. simpl in *.
+        unfold update_vchannel, update_victim,
+               update_achannel, update_adversary in *; simpl in *. split. rewrite !update_shadow, !state_upd_eq; auto. split; rewrite update_eq; reflexivity.
+      -- constructor.
+    - eapply DConsequence with (Q := (fun sig => exists l,
+            P (mode_chan_upd m sig chn l)
+            /\ mode_chan m sig chn = l ++ [mode_store m sig x])%list).
+      -- intros s Ps. exact Ps.
+      -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H.
+        --- exists (s'.(vstate).(ch) chn). destruct s' as [ [vs vc] a]. simpl in *. unfold update_vchannel, update_victim,
+               update_achannel, update_adversary in *; simpl in *. split. rewrite !update_shadow, !state_upd_eq; auto. rewrite update_eq. reflexivity.
+        ---  exists (s'.(astate).(ch) chn). destruct s' as [ vs [as0 ac] ]. simpl in *. unfold update_vchannel, update_victim,
+               update_achannel, update_adversary in *; simpl in *. split. rewrite !update_shadow, !state_upd_eq; auto. rewrite update_eq. reflexivity.
+      -- constructor. 
+    - destruct m. 
+      -- eapply DConsequence with (Q := fun _ => False).
+        --- intros s Ps. exact Ps.
+        --- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H.
+        --- apply DEmpty.
+      -- eapply DConsequence with (P := aor P P) (Q := aor (aand_lift Ad P B) (aand P (anot (lift Ad B)))).
+        --- intros s Ps. invs Ps; assumption.
+        --- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H. 
+          left. split; assumption. 
+          right. split; assumption.
+        --- constructor; constructor.
+    - eapply DConsequence with (Q := fun _ => False).
+      -- intros s Ps. exact Ps.
+      -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H.
+      -- apply DEmpty.
+    - set (Entry := (fun sig => exists sig0, P sig0 /\ sig = mode_upd m sig0 x (e (mode_store m sig0)))). 
+       eapply DConsequence with (Q := fun sig => exists (sb : estate) (x0 : N),
+        (exists s0, Entry s0 /\ [[c]] m |=> (s0, sb)) /\ sig = mode_upd m sb x x0).
+      -- intros s Ps. exact Ps.
+      -- intros s Qs. destruct (DS s Qs) as (s' & Ps' & H). invs H. exists sig', x_out. split. 
+        exists (mode_upd m s' x (e (mode_store m s'))). split. exists s'. now split. assumption.
+        reflexivity.
+      -- apply DLocal, IH.  
+      intros s2 (s & Ps & DS'). now exists s.
+    Qed.
      
  
-
-
-
-
-
-
 
 
 (* Depends on the admitted [completeness] *)
