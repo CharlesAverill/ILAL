@@ -4,8 +4,7 @@
     single-thread system ([derivable] vs [under_approximate]) and for the
     composed one-step system ([derivable2] vs [al_underc_r]).
 
-    The two completeness theorems are stated and left [Admitted]; the helper
-    lemmas are proved. See Other/COMPLETENESS_GAPS.md for the proof plan. *)
+*)
 From ILAL Require Import AL.AL AL.language state tactics.
 From Stdlib Require Import NArith String List.
 Import ListNotations.
