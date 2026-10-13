@@ -229,12 +229,80 @@ Definition interpret_spec2 (m1 m2 : mode) (PA : aprop2) (c1 c2 : astmt)
                            (QB : aprop2) : Prop :=
   AL m1 , m2 :: PA |- c1 // c2 ==> QB <-> al_underc_r m1 m2 PA c1 c2 QB.
 
+Definition sing2 (X Y : estate) : aprop2 :=
+  aprod (fun sp => sp = X) (fun sa => sa = Y).
+
+Lemma derivable2_singleton : forall m1 m2 c1 c2 X Y,
+  AL m1 , m2 :: (sing2 X Y) |- c1 // c2 ==> (al_postc_r m1 m2 c1 c2 (sing2 X Y)).
+Proof.
+  intros m1 m2 c1 c2 X Y.
+  (* One index per kind of [cds] step: [CInd], or a transfer on channel [s] *)
+  set (T := ((unit + string) + string)%type).
+  set (Post := fun (t : T) => (
+    match t with
+    | inl (inl _) =>
+        aprod (post (ds c1 m1) (fun sp => sp = X)) (post (ds c2 m2) (fun sa => sa = Y))
+    | inl (inr s) => fun sq sb => exists v l1 l2,
+        sing2 X Y (sq[[ s :=vch v :: l1 ]]) (sb[[ s :=ach l2 ]])
+        /\ sq.(vstate).(ch) s = l1
+        /\ sb.(astate).(ch) s = (l2 ++ [v])%list
+    | inr s => fun sq sb => exists v l1 l2,
+        sing2 X Y (sq[[ s :=vch l2 ]]) (sb[[ s :=ach v :: l1 ]])
+        /\ sb.(astate).(ch) s = l1
+        /\ sq.(vstate).(ch) s = (l2 ++ [v])%list
+    end : aprop2)).
+  eapply D2Consequence with
+    (PA := fun sp sa => exists t : T, sing2 X Y sp sa)
+    (QB := fun sq sb => exists t, Post t sq sb).
+  - intros sp sa [_ H]. exact H.
+  - intros sq sb (sp & sa & [-> ->] & Hcds). invs Hcds.
+    -- exists (inl (inl tt)). split; [exists X | exists Y]; now split.
+    -- exists (inl (inr s)), v, l1, (Y.(astate).(ch) s). repeat split.
+       --- now rewrite vch_shadow, vch_eq.
+       --- now rewrite ach_shadow, ach_eq.
+       --- apply vch_get.
+       --- apply ach_get.
+    -- exists (inr s), v, l1, (X.(vstate).(ch) s). repeat split.
+       --- now rewrite vch_shadow, vch_eq.
+       --- now rewrite ach_shadow, ach_eq.
+       --- apply ach_get.
+       --- apply vch_get.
+  - apply (D2DisjI m1 m2 T (fun _ => sing2 X Y) Post).
+    intros [ [ [] | s ] | s ].
+    -- apply D2Par; apply completeness; intros s H; exact H.
+    -- exact (D2Com m1 m2 (sing2 X Y) c1 c2 s).
+    -- exact (D2ComAP m1 m2 (sing2 X Y) c1 c2 s).
+Qed.
+
+Lemma derivable2_strongest_post : forall m1 m2 PA c1 c2,
+  AL m1 , m2 :: PA |- c1 // c2 ==> (al_postc_r m1 m2 c1 c2 PA).
+Proof.
+  intros m1 m2 PA c1 c2.
+  (* One index per pair in [PA] *)
+  set (I := { p : estate * estate | PA (fst p) (snd p) }).
+  set (Pre := fun (i : I) => sing2 (fst (proj1_sig i)) (snd (proj1_sig i))).
+  eapply D2Consequence with
+    (PA := fun sp sa => exists i, Pre i sp sa)
+    (QB := fun sq sb => exists i, al_postc_r m1 m2 c1 c2 (Pre i) sq sb).
+  - intros sp sa [ [ [X Y] HXY ] [-> ->] ]. exact HXY.
+  - intros sq sb (sp & sa & HPA & Hcds).
+    exists (exist _ (sp, sa) HPA), sp, sa. split. now split. exact Hcds.
+  - apply (D2DisjI m1 m2 I Pre (fun i => al_postc_r m1 m2 c1 c2 (Pre i))).
+    intros [ [X Y] HXY ]. apply derivable2_singleton.
+Qed.
+
+
 Theorem completeness2 :
   forall m1 m2 PA c1 c2 QB,
     al_underc_r m1 m2 PA c1 c2 QB ->
     AL m1 , m2 :: PA |- c1 // c2 ==> QB.
 Proof.
-Admitted.
+  intros m1 m2 PA c1 c2 QB H_AL.
+  eapply D2Consequence with (PA := PA) (QB := al_postc_r m1 m2 c1 c2 PA).
+  - now intros a b H. 
+  - apply H_AL.
+  - apply derivable2_strongest_post.
+Qed.
 
 (* Depends on the admitted [completeness2] *)
 Theorem equivalence2 : forall m1 m2 PA c1 c2 QB, interpret_spec2 m1 m2 PA c1 c2 QB.
