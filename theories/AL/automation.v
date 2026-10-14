@@ -355,14 +355,21 @@ Ltac next_pre_at H c1 c2 X2 Y2 name :=
 
 (** ** Chaining
 
-    [chain_tac] threads a list of already-proved [cds] phase facts into one
-    [cds_star_hetero] witness via [cds_cds_star_hetero]/
-    [cds_star_hetero_trans], so the caller doesn't have to hand-nest
-    [eapply cds_star_hetero_trans] once per phase. *)
-Ltac chain1 H := exact (cds_cds_star_hetero _ _ _ _ _ _ H).
-Ltac chain_tac Hs :=
-  match Hs with
-  | (?Hs', ?H) =>
-      eapply cds_star_hetero_trans; [ chain_tac Hs' | chain1 H ]
+    [chain_tac] threads a list of already-proved [cds] phase facts, in run
+    order, into one [cds_run] of the fixed system: each phase's commands must
+    be a prefix of what remains of the program and the adversary
+    ([prefix_tac]), and the run must use both up. *)
+Ltac prefix_tac :=
+  first
+    [ apply PrefAll
+    | apply PrefNone
+    | apply PrefSeq
+    | apply PrefSeqR; prefix_tac
+    | apply PrefSeqL; prefix_tac ].
+Ltac chain1 H := eapply CRStep; [ exact H | prefix_tac | prefix_tac | ].
+Ltac chain_steps Hs :=
+  lazymatch Hs with
+  | (?Hs', ?H) => chain_steps Hs'; chain1 H
   | ?H => chain1 H
   end.
+Ltac chain_tac Hs := chain_steps Hs; apply CRDone.

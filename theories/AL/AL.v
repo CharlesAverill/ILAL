@@ -620,15 +620,31 @@ Inductive cds_star (m1 m2 : mode) (c1 c2 : astmt) :
     cds m1 m2 c1 c2 q r ->
     cds_star m1 m2 c1 c2 p r.
 
-(** Generalization of [cds_star] to arbitrary [c1,c2] at each
-    step, allowing for proof walkthroughs like we see in the paper *)
-Inductive cds_star_hetero (m1 m2 : mode) :
-  (estate * estate) -> (estate * estate) -> Prop :=
-| CSH0 : forall p, cds_star_hetero m1 m2 p p
-| CSHN : forall c1 c2 p q r,
-    cds_star_hetero m1 m2 p q ->
-    cds m1 m2 c1 c2 q r ->
-    cds_star_hetero m1 m2 p r.
+(** Runs of a FIXED system [c1 || c2], for the stepwise walkthroughs of the
+    paper's examples.  Each step runs a prefix of each side's remaining
+    program as one [cds] step and leaves the rest; a side that does not move
+    in a step (including during a transfer) runs the empty prefix [skip].
+    The run ends when both programs are used up.
+
+    [prefix c d k]: [c] behaves as [d ;; k] ([prefix_sound]), cutting [c] only
+    at a point of its sequential structure, never inside a choice, loop, or
+    local scope. *)
+Inductive prefix : astmt -> astmt -> astmt -> Prop :=
+| PrefAll : forall c, prefix c c ASkip
+| PrefNone : forall c, prefix c ASkip c
+| PrefSeq : forall c1 c2, prefix (ASeq c1 c2) c1 c2
+| PrefSeqR : forall c1 c2 d k, prefix c2 d k -> prefix (ASeq c1 c2) (ASeq c1 d) k
+| PrefSeqL : forall c1 c2 d k, prefix c1 d k -> prefix (ASeq c1 c2) d (ASeq k c2).
+
+Inductive cds_run (m1 m2 : mode) :
+  astmt -> astmt -> (estate * estate) -> (estate * estate) -> Prop :=
+| CRDone : forall p, cds_run m1 m2 ASkip ASkip p p
+| CRStep : forall c1 c2 d1 d2 k1 k2 p q r,
+    cds m1 m2 d1 d2 p q ->
+    prefix c1 d1 k1 ->
+    prefix c2 d2 k2 ->
+    cds_run m1 m2 k1 k2 q r ->
+    cds_run m1 m2 c1 c2 p r.
 
 Definition al_postc_star (m1 m2 : mode) (c1 c2 : astmt) (PA : aprop2) : aprop2 :=
   fun sq sb =>
@@ -1062,19 +1078,36 @@ Lemma cds_cds_star : forall m1 m2 c1 c2 p q,
   cds m1 m2 c1 c2 p q -> cds_star m1 m2 c1 c2 p q.
 Proof. intros. eapply CSN. apply CS0. assumption. Qed.
 
-Lemma cds_star_hetero_trans : forall m1 m2 p q r,
-  cds_star_hetero m1 m2 p q ->
-  cds_star_hetero m1 m2 q r ->
-  cds_star_hetero m1 m2 p r.
-Proof.
-  intros m1 m2 p q r Hpq Hqr. revert p Hpq. induction Hqr; intros p1 Hp1.
-  - assumption.
-  - eapply CSHN. apply IHHqr. exact Hp1. exact H.
-Qed.
+Lemma ds_seq_inv : forall c1 c2 m x z,
+  ds (ASeq c1 c2) m (x, z) -> exists y, ds c1 m (x, y) /\ ds c2 m (y, z).
+Proof. intros c1 c2 m x z H. inversion H; subst. eexists. split; eassumption. Qed.
 
-Lemma cds_cds_star_hetero : forall m1 m2 c1 c2 p q,
-  cds m1 m2 c1 c2 p q -> cds_star_hetero m1 m2 p q.
-Proof. intros m1 m2 c1 c2 p q H. eapply CSHN. apply CSH0. exact H. Qed.
+Lemma ds_skip_inv : forall m x y, ds ASkip m (x, y) -> x = y.
+Proof. intros m x y H. inversion H; subst. reflexivity. Qed.
+
+(** Cutting a program at a prefix does not change its meaning. *)
+Theorem prefix_sound : forall c d k, prefix c d k ->
+  forall m x y, ds c m (x, y) <-> ds (ASeq d k) m (x, y).
+Proof.
+  intros c d k Hp. induction Hp as [c | c | c1 c2 | c1 c2 d k Hp IH | c1 c2 d k Hp IH];
+    intros m x y; split; intros H.
+  - eapply EDSeq; [exact H | apply EDSkip].
+  - apply ds_seq_inv in H as (z & H1 & H2). apply ds_skip_inv in H2. subst. exact H1.
+  - eapply EDSeq; [apply EDSkip | exact H].
+  - apply ds_seq_inv in H as (z & H1 & H2). apply ds_skip_inv in H1. subst. exact H2.
+  - exact H.
+  - exact H.
+  - apply ds_seq_inv in H as (z & H1 & H2). apply IH in H2.
+    apply ds_seq_inv in H2 as (w & H2 & H3).
+    eapply EDSeq; [eapply EDSeq; eassumption | exact H3].
+  - apply ds_seq_inv in H as (z & H1 & H3). apply ds_seq_inv in H1 as (w & H1 & H2).
+    eapply EDSeq; [exact H1 |]. apply IH. eapply EDSeq; eassumption.
+  - apply ds_seq_inv in H as (z & H1 & H3). apply IH in H1.
+    apply ds_seq_inv in H1 as (w & H1 & H2).
+    eapply EDSeq; [exact H1 | eapply EDSeq; eassumption].
+  - apply ds_seq_inv in H as (z & H1 & H2). apply ds_seq_inv in H2 as (w & H2 & H3).
+    eapply EDSeq; [| exact H3]. apply IH. eapply EDSeq; eassumption.
+Qed.
 
 Definition PBV_premise (m1 m2 : mode) (P A : nat -> aprop) (c1 c2 : astmt)
            (pred : nat -> nat -> (nat * nat)) : Prop :=
@@ -1567,9 +1600,12 @@ Qed.
 Definition attack_reaches (cp ca : astmt) (sig0 : estate) (Post : aprop) : Prop :=
   exists sigf, cstep_star cp ca sig0 ASkip ASkip sigf /\ Post sigf.
 
-(** [attack_reaches] for a full run of a multi-threaded system *)
-Definition attack_reaches_AL (m1 m2 : mode) (sp0 sa0 : estate) (Post : aprop) : Prop :=
-  exists sq sb, cds_star_hetero m1 m2 (sp0, sa0) (sq, sb) /\ Post sb.
+(** [attack_reaches] for the composed semantics: the fixed program [c1] and
+    adversary [c2] run to completion from [(sp0, sa0)] and end in a pair of
+    views satisfying [Post]. *)
+Definition attack_reaches_AL (m1 m2 : mode) (c1 c2 : astmt) (sp0 sa0 : estate)
+  (Post : aprop2) : Prop :=
+  exists sq sb, cds_run m1 m2 c1 c2 (sp0, sa0) (sq, sb) /\ Post sq sb.
 
 End ComposedInterleaving.
 

@@ -293,7 +293,8 @@ Qed.
     [DAssume]/[DAssign]/[DWrite] (program reads, branches, replies),
     [D2Com] (delivered to the adversary), [DRead]/[DAdvAssertSuccess]
     (adversary reads, asserts, succeeds) -- glued phase by phase via
-    [derivable2_cds_step] and [cds_star_hetero].
+    [derivable2_cds_step] and [cds_run], which checks that the phases'
+    commands are successive prefixes of [prog_body] and [adv_body alpha].
 
     [cds]'s composed pair keeps the program's and the adversary's views as
     TWO SEPARATE evolving states (see [cds]'s own comments), synchronised
@@ -309,8 +310,8 @@ Qed.
     exactly the row-by-row granularity this proof needs. *)
 Theorem example1_attack_via_AL : forall alpha,
   (alpha > TEN_M)%N ->
-  attack_reaches_AL Ok Ad init init
-    (fun sig => sig.(astate).(s) "res" = 1%N).
+  attack_reaches_AL Ok Ad prog_body (adv_body alpha) init init
+    (fun sq sb => sb.(astate).(s) "res" = 1%N /\ sq.(vstate).(s) "win" = 1%N).
 Proof.
   intros alpha Hbig. unfold attack_reaches_AL.
   set (sp0 := init). set (sa0 := init).
@@ -411,7 +412,7 @@ Proof.
   (* --- Chain all five phases and conclude. --- *)
   exists sp5, sa4r. split.
   - chain_tac (((( Phase1, Phase2), Phase3), Phase4), Phase5).
-  - exact Hsa4r_res.
+  - split; [exact Hsa4r_res | reflexivity].
 Qed.
 
 (** ** Example 1, semi-automated (see AL.automation)
@@ -423,8 +424,8 @@ Qed.
     bookkeeping is spelled out. *)
 Theorem example1_attack_via_AL_auto : forall alpha,
   (alpha > TEN_M)%N ->
-  attack_reaches_AL Ok Ad init init
-    (fun sig => sig.(astate).(s) "res" = 1%N).
+  attack_reaches_AL Ok Ad prog_body (adv_body alpha) init init
+    (fun sq sb => sb.(astate).(s) "res" = 1%N /\ sq.(vstate).(s) "win" = 1%N).
 Proof.
   intros alpha Hbig. unfold attack_reaches_AL.
   assert (Phase1 : cds Ok Ad ASkip (ASeq (AAssign "val" alpha) (AWrite "s" "val"))
@@ -717,8 +718,8 @@ Qed.
     Com phases. *)
 Theorem obt_round_success_via_AL : forall sig0 v,
   round_entry sig0 v ->
-  attack_reaches_AL Ok Ad sig0 sig0
-    (fun sig => sig.(astate).(s) "ret" = 0%N).
+  attack_reaches_AL Ok Ad cp_round ca_round sig0 sig0
+    (fun sq sb => sb.(astate).(s) "ret" = 0%N /\ sq.(vstate).(s) "err" = 0%N).
 Proof.
   intros sig0 v (Hsecret & Hguess & Hvch & Hach). unfold attack_reaches_AL.
   set (sp0 := sig0) in *. set (sa0 := sp0).
@@ -834,7 +835,7 @@ Proof.
   (* --- Chain all five phases and conclude. --- *)
   exists sp5, sa4s. split.
   - chain_tac (((( Phase1, Phase2), Phase3), Phase4), Phase5).
-  - exact Hsa4s_ret.
+  - split; [exact Hsa4s_ret | reflexivity].
 Qed.
 
 (** ** Example 2, semi-automated (see AL.automation)
@@ -843,8 +844,8 @@ Qed.
     [example1_attack_via_AL_auto]. *)
 Theorem obt_round_success_via_AL_auto : forall sig0 v,
   round_entry sig0 v ->
-  attack_reaches_AL Ok Ad sig0 sig0
-    (fun sig => sig.(astate).(s) "ret" = 0%N).
+  attack_reaches_AL Ok Ad cp_round ca_round sig0 sig0
+    (fun sq sb => sb.(astate).(s) "ret" = 0%N /\ sq.(vstate).(s) "err" = 0%N).
 Proof.
   intros sig0 v (Hsecret & Hguess & Hvch & Hach). unfold attack_reaches_AL.
   assert (Phase1 : cds Ok Ad ASkip (AWrite "sock" "guess")
@@ -1285,8 +1286,9 @@ Qed.
     with twice as many local-computation phases. *)
 Theorem eqtest_attack_via_AL : forall sig0 initp0 num0,
   eqtest_entry sig0 initp0 num0 ->
-  attack_reaches_AL Ok Ad sig0 sig0
-    (fun sig => sig.(astate).(s) "guess1" = sig.(astate).(s) "guess2").
+  attack_reaches_AL Ok Ad program3 adv3_round sig0 sig0
+    (fun sq sb => sb.(astate).(s) "guess1" = sb.(astate).(s) "guess2" /\
+                  sq.(vstate).(s) "curp" = sq.(vstate).(s) "curp2").
 Proof.
   intros sig0 initp0 num0 (Hinitp & Hnum & Hbig & Hv1 & Ha1 & Hv2 & Ha2).
   unfold attack_reaches_AL.
@@ -1534,7 +1536,8 @@ Proof.
   exists sp9, sa8g. split.
   - chain_tac (((((((( Phase1, Phase2), Phase3), Phase4), Phase5), Phase6), Phase7),
                 Phase8), Phase9).
-  - change (mode_store Ad sa8g "guess1" = mode_store Ad sa8g "guess2").
+  - split; [| reflexivity].
+    change (mode_store Ad sa8g "guess1" = mode_store Ad sa8g "guess2").
     rewrite Hsa8g_guess1, Hsa8g_guess2. reflexivity.
 Qed.
 
@@ -1544,8 +1547,9 @@ Qed.
     [example1_attack_via_AL_auto]/[obt_round_success_via_AL_auto]. *)
 Theorem eqtest_attack_via_AL_auto : forall sig0 initp0 num0,
   eqtest_entry sig0 initp0 num0 ->
-  attack_reaches_AL Ok Ad sig0 sig0
-    (fun sig => sig.(astate).(s) "guess1" = sig.(astate).(s) "guess2").
+  attack_reaches_AL Ok Ad program3 adv3_round sig0 sig0
+    (fun sq sb => sb.(astate).(s) "guess1" = sb.(astate).(s) "guess2" /\
+                  sq.(vstate).(s) "curp" = sq.(vstate).(s) "curp2").
 Proof.
   intros sig0 initp0 num0 (Hinitp & Hnum & Hbig & Hv1 & Ha1 & Hv2 & Ha2).
   unfold attack_reaches_AL.
@@ -1650,7 +1654,7 @@ Proof.
   split.
   - chain_tac (((((((( Phase1, Phase2), Phase3), Phase4), Phase5), Phase6), Phase7),
                 Phase8), Phase9).
-  - solve_side.
+  - split; [solve_side | subst_states; vm_compute in Hinitp |- *; rewrite Hinitp; reflexivity].
 Qed.
 
 Close Scope al_scope.
