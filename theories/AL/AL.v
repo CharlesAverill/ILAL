@@ -135,17 +135,9 @@ Inductive ds : astmt -> mode -> (estate * estate) -> Prop :=
 | EDParR c1 c2 m s1 s2 :
     [[ c2 ]] m |=> (s1, s2) ->
     [[ c1 <||> c2 ]] m |=> (s1, s2)
-(** Com(c1, c2): move the head [v] of the sender's channel to the tail of the receiver's *)
-| EDComVA c1 c2 m ch_id sig v l1 l2 :
-    sig.(vstate).(ch) ch_id = v :: l1 ->
-    sig.(astate).(ch) ch_id = l2 ->
-    [[ Com(c1, c2) ]] m |=>
-      (sig, sig[[ch_id :=vch l1]] [[ch_id :=ach (l2 ++ [v])%list]])
-| EDComAV c1 c2 m ch_id sig v l1 l2 :
-    sig.(astate).(ch) ch_id = v :: l1 ->
-    sig.(vstate).(ch) ch_id = l2 ->
-    [[ Com(c1, c2) ]] m |=>
-      (sig, sig[[ch_id :=ach l1]] [[ch_id :=vch (l2 ++ [v])%list]])
+(** Com(c1, c2) has no single-thread denotation: like [adv_assert] in [Ok],
+    its [ds] relation is empty. Communication is a composed step ([cds]),
+    matching the paper, whose [[Com]] is only defined on state pairs. *)
 | EDLocal x e c m sig sig' (x_out : N) :
     [[ c ]] m |=> (mode_upd m sig x (e (mode_store m sig)), sig') ->
     [[ local x = e in c ]] m |=>
@@ -308,6 +300,13 @@ Inductive derivable : aprop -> astmt -> mode -> aprop -> Prop :=
 | DChoiceR : forall P Q c1 c2 m,
     P, [c2] m, Q ->
     P, [c1 <+> c2] m, Q
+(* Parallel composition: same union semantics as choice ([EDParL]/[EDParR]) *)
+| DParL : forall P Q c1 c2 m,
+    P, [c1] m, Q ->
+    P, [c1 <||> c2] m, Q
+| DParR : forall P Q c1 c2 m,
+    P, [c2] m, Q ->
+    P, [c1 <||> c2] m, Q
 (* Iterate Zero *)
 | DIterZero : forall P c m,
     P, [c**] m, P
@@ -350,10 +349,13 @@ Inductive derivable : aprop -> astmt -> mode -> aprop -> Prop :=
     Q, [adv_assert(B)] Ad, (aand_lift Ad Q B)
 | DAdvAssertFailure : forall Q B,
     Q, [adv_assert(B)] Ad, (aand Q (anot (lift Ad B)))
-(* Locals *)
+(* Locals: the body runs from the strongest post of [x := e] over [P] (this
+   is [DAssign]'s postcondition) and [x] is havocked on exit, as in [EDLocal].
+   The paper's [P /\ x = e] premise evaluates [e] at body entry rather than at
+   the pre-state and is exact only when [x] is free in neither [P] nor [e]. *)
 | DLocal : forall P Q x (e : expression) m c,
-    (fun sig => P (mode_upd m sig x (e (mode_store m sig)))
-                /\ mode_store m sig x = e (mode_store m sig)),
+    (fun sig => exists sig0, P sig0
+                /\ sig = mode_upd m sig0 x (e (mode_store m sig0))),
       [c] m, Q ->
     P, [local x = e in c] m,
        (fun sig => exists (sb : estate) (x0 : N),
@@ -524,6 +526,10 @@ Proof.
     exists s'. auto using EDChoiceL.
   - (* DChoiceR *) intros s Qs. destruct (IHderivable s Qs) as (s' & Ps' & DS).
     exists s'. auto using EDChoiceR.
+  - (* DParL *) intros s Qs. destruct (IHderivable s Qs) as (s' & Ps' & DS).
+    exists s'. auto using EDParL.
+  - (* DParR *) intros s Qs. destruct (IHderivable s Qs) as (s' & Ps' & DS).
+    exists s'. auto using EDParR.
   - (* DIterZero *) intros s Ps. exists s. split. assumption. constructor.
   - (* DIterNonzero *) intros s Qs. destruct (IHderivable s Qs) as (s' & Ps' & DS).
     exists s'. split. assumption. now apply star_equiv.
@@ -564,15 +570,9 @@ Proof.
     exists sig. auto using EDAdvAssertSuccess.
   - (* DAdvAssertFailure *) intros sig (Qsig & nBsig).
     exists sig. auto using EDAdvAssertFailure.
-  - (* DLocal *) intros sig (sb & x0 & Qsb & Hsig).
-    destruct (IHderivable sb Qsb) as (sp & (Psp & Hsp_x) & DSbody).
-    assert (Hsp_entry : mode_upd m sp x (e (mode_store m sp)) = sp).
-    { rewrite <- Hsp_x. now rewrite mode_upd_store_eq. }
-    exists sp. split.
-    + rewrite Hsp_entry in Psp. exact Psp.
-    + subst sig.
-      apply (EDLocal x e c m sp sb x0).
-      rewrite Hsp_entry. exact DSbody.
+  - (* DLocal *) intros sig (sb & x0 & Qsb & ->).
+    destruct (IHderivable sb Qsb) as (sp & (sig0 & Psig0 & ->) & DSbody).
+    exists sig0. split. exact Psig0. now apply EDLocal.
 Qed.
 
 (** Composed semantics and proof system
@@ -674,6 +674,14 @@ Inductive derivable2 :
     QB' ==>> QB ->
     AL m1 , m2 :: PA |- c1 // c2 ==> QB ->
     AL m1 , m2 :: PA' |- c1 // c2 ==> QB'
+(* Indexed disjunction. Pre/postconditions are relations ([aprop2]), not
+   products, because [D2Com] couples the two sides. A relation is a union of
+   singletons and one [QB] may mix transfers on different channels, so a
+   binary disjunction is not enough for completeness. *)
+| D2DisjI : forall m1 m2 (I : Type) (PA QB : I -> aprop2) c1 c2,
+    (forall i, AL m1 , m2 :: (PA i) |- c1 // c2 ==> (QB i)) ->
+    AL m1 , m2 :: (fun sp sa => exists i, PA i sp sa) |- c1 // c2
+              ==> (fun sq sb => exists i, QB i sq sb)
 | D2Com : forall m1 m2 (PA : aprop2) c1 c2 (s : id),
     AL m1 , m2 :: PA |- c1 // c2 ==>
       (fun sq sb => exists v l1 l2,
@@ -954,6 +962,10 @@ Proof.
     intros sq sb QB'sq. apply H0 in QB'sq.
     destruct (IHderivable2 sq sb QB'sq) as (sp & sa & PAsp & DS).
     exists sp, sa. split. now apply H. assumption.
+  - (* D2DisjI *)
+    intros sq sb (i & HQB).
+    destruct (H0 i sq sb HQB) as (sp & sa & HPA & Hcds).
+    exists sp, sa. split. now exists i. exact Hcds.
   - (* D2Com *)
     intros sq sb (v & l1 & l2 & PApre & Hq & Hb).
     exists (sq[[ s :=vch v :: l1 ]]), (sb[[ s :=ach l2 ]]).
@@ -1167,6 +1179,46 @@ Qed.
 
 End PBVMultiStep.
 
+(** Iterated composed proof system, for [cds_star] *)
+
+Reserved Notation
+  "'AL*' m1 ',' m2 :: PA |- c1 '//' c2 ==> QB"
+  (at level 90, c1 custom al_stmt at level 99, c2 custom al_stmt at level 99,
+   m1 constr at level 0, m2 constr at level 0,
+   PA constr at level 0, QB constr at level 0).
+
+Inductive derivable_star (m1 m2 : mode) (c1 c2 : astmt) : aprop2 -> aprop2 -> Prop :=
+| DSConsequence : forall PA PA' QB QB',
+    PA ==>> PA' ->
+    QB' ==>> QB ->
+    AL* m1 , m2 :: PA |- c1 // c2 ==> QB ->
+    AL* m1 , m2 :: PA' |- c1 // c2 ==> QB'
+(* Backward variant over [derivable2] steps; [P] is a relation, unlike [PBV] *)
+| DSVariant : forall (P : nat -> aprop2),
+    (forall n, AL m1 , m2 :: (P n) |- c1 // c2 ==> (P (S n))) ->
+    AL* m1 , m2 :: (P O) |- c1 // c2 ==> (fun sq sb => exists n, P n sq sb)
+where "'AL*' m1 ',' m2 :: PA |- c1 '//' c2 ==> QB" :=
+  (derivable_star m1 m2 c1 c2 PA QB).
+
+Theorem soundness_star :
+  forall m1 m2 PA c1 c2 QB,
+    AL* m1 , m2 :: PA |- c1 // c2 ==> QB ->
+    al_underc_star m1 m2 PA c1 c2 QB.
+Proof.
+  intros m1 m2 PA c1 c2 QB H. induction H.
+  - (* DSConsequence *)
+    intros sq sb HQ. destruct (IHderivable_star sq sb (H0 sq sb HQ)) as (sp & sa & HP & Hs).
+    exists sp, sa. split. now apply H. exact Hs.
+  - (* DSVariant *)
+    assert (Aux : forall n sq sb, P n sq sb -> al_postc_star m1 m2 c1 c2 (P O) sq sb).
+    { induction n; intros sq sb Hn.
+      - exists sq, sb. split. exact Hn. apply CS0.
+      - destruct (soundness2 _ _ _ _ _ _ (H n) sq sb Hn) as (sp & sa & Hp & Step).
+        destruct (IHn sp sa Hp) as (s0 & a0 & H0 & Hs).
+        exists s0, a0. split. exact H0. eapply CSN; eassumption. }
+    intros sq sb (n & Hn). now apply (Aux n).
+Qed.
+
 (* Frame rule / constancy *)
 Section Framing.
 
@@ -1296,8 +1348,6 @@ Proof.
     apply IHds; intuition.
     eapply indep_sub; [| |eassumption];
       intros; simpl; now apply in_app_r.
-  - destruct CF.
-  - destruct CF.
   - destruct CF.
 Qed.
 
