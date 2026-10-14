@@ -1440,7 +1440,10 @@ Inductive sstep : mode -> astmt -> estate -> astmt -> estate -> Prop :=
 | SLocalEnter : forall m x e c sig,
     sstep m (ALocal x e c) sig
           (ASeq (AAssign x e)
-                (ASeq c (AAssign x (fun _ => mode_store m sig x)))) sig.
+                (ASeq c (AAssign x (fun _ => mode_store m sig x)))) sig
+(* Single-thread [c1 <||> c2] is a choice, as in [EDParL]/[EDParR] *)
+| SParL : forall m c1 c2 sig, sstep m (APar c1 c2) sig c1 sig
+| SParR : forall m c1 c2 sig, sstep m (APar c1 c2) sig c2 sig.
 
 Inductive sstep_star (m : mode) : astmt -> estate -> astmt -> estate -> Prop :=
 | SS0 : forall c sig, sstep_star m c sig c sig
@@ -1517,6 +1520,8 @@ Proof.
   - (* SStar0 *) inversion Hds; subst. apply EDStar0.
   - (* SStarN *) inversion Hds; subst; eauto using ds_star_left.
   - (* SLocalEnter *) apply ds_local_desugar. exact Hds.
+  - (* SParL *) apply EDParL. exact Hds.
+  - (* SParR *) apply EDParR. exact Hds.
 Qed.
 
 Lemma sstep_star_ds : forall m c sig c' sig',
