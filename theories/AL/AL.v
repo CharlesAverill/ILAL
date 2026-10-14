@@ -1179,6 +1179,46 @@ Qed.
 
 End PBVMultiStep.
 
+(** Iterated composed proof system, for [cds_star] *)
+
+Reserved Notation
+  "'AL*' m1 ',' m2 :: PA |- c1 '//' c2 ==> QB"
+  (at level 90, c1 custom al_stmt at level 99, c2 custom al_stmt at level 99,
+   m1 constr at level 0, m2 constr at level 0,
+   PA constr at level 0, QB constr at level 0).
+
+Inductive derivable_star (m1 m2 : mode) (c1 c2 : astmt) : aprop2 -> aprop2 -> Prop :=
+| DSConsequence : forall PA PA' QB QB',
+    PA ==>> PA' ->
+    QB' ==>> QB ->
+    AL* m1 , m2 :: PA |- c1 // c2 ==> QB ->
+    AL* m1 , m2 :: PA' |- c1 // c2 ==> QB'
+(* Backward variant over [derivable2] steps; [P] is a relation, unlike [PBV] *)
+| DSVariant : forall (P : nat -> aprop2),
+    (forall n, AL m1 , m2 :: (P n) |- c1 // c2 ==> (P (S n))) ->
+    AL* m1 , m2 :: (P O) |- c1 // c2 ==> (fun sq sb => exists n, P n sq sb)
+where "'AL*' m1 ',' m2 :: PA |- c1 '//' c2 ==> QB" :=
+  (derivable_star m1 m2 c1 c2 PA QB).
+
+Theorem soundness_star :
+  forall m1 m2 PA c1 c2 QB,
+    AL* m1 , m2 :: PA |- c1 // c2 ==> QB ->
+    al_underc_star m1 m2 PA c1 c2 QB.
+Proof.
+  intros m1 m2 PA c1 c2 QB H. induction H.
+  - (* DSConsequence *)
+    intros sq sb HQ. destruct (IHderivable_star sq sb (H0 sq sb HQ)) as (sp & sa & HP & Hs).
+    exists sp, sa. split. now apply H. exact Hs.
+  - (* DSVariant *)
+    assert (Aux : forall n sq sb, P n sq sb -> al_postc_star m1 m2 c1 c2 (P O) sq sb).
+    { induction n; intros sq sb Hn.
+      - exists sq, sb. split. exact Hn. apply CS0.
+      - destruct (soundness2 _ _ _ _ _ _ (H n) sq sb Hn) as (sp & sa & Hp & Step).
+        destruct (IHn sp sa Hp) as (s0 & a0 & H0 & Hs).
+        exists s0, a0. split. exact H0. eapply CSN; eassumption. }
+    intros sq sb (n & Hn). now apply (Aux n).
+Qed.
+
 (* Frame rule / constancy *)
 Section Framing.
 

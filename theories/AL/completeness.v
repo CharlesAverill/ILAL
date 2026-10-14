@@ -1,8 +1,9 @@
-(** * Completeness of AL, tiers 1 and 2: statements and machinery
+(** * Completeness of AL, tiers 1 to 3: statements and machinery
 
     Mirrors [IL.v]'s [interpret_spec] / [completeness] / [equivalence] for the
-    single-thread system ([derivable] vs [under_approximate]) and for the
-    composed one-step system ([derivable2] vs [al_underc_r]).
+    single-thread system ([derivable] vs [under_approximate]), the composed
+    one-step system ([derivable2] vs [al_underc_r]) and its iteration
+    ([derivable_star] vs [al_underc_star]).
 
 *)
 From ILAL Require Import AL.AL AL.language state tactics.
@@ -303,10 +304,53 @@ Proof.
   - apply derivable2_strongest_post.
 Qed.
 
-(* Depends on the admitted [completeness2] *)
 Theorem equivalence2 : forall m1 m2 PA c1 c2 QB, interpret_spec2 m1 m2 PA c1 c2 QB.
 Proof.
   intros. split.
   - exact (soundness2 m1 m2 PA c1 c2 QB).
   - exact (completeness2 m1 m2 PA c1 c2 QB).
+Qed.
+
+(** ** Tier 3: iterated composed steps ([cds_star]) *)
+
+Definition interpret_spec_star (m1 m2 : mode) (PA : aprop2) (c1 c2 : astmt)
+                               (QB : aprop2) : Prop :=
+  AL* m1 , m2 :: PA |- c1 // c2 ==> QB <-> al_underc_star m1 m2 PA c1 c2 QB.
+
+(* [PA] after [n] composed steps *)
+Fixpoint post_iter (m1 m2 : mode) (c1 c2 : astmt) (PA : aprop2) (n : nat) : aprop2 :=
+  match n with
+  | O => PA
+  | S n' => al_postc_r m1 m2 c1 c2 (post_iter m1 m2 c1 c2 PA n')
+  end.
+
+Lemma star_is_iter : forall m1 m2 c1 c2 PA sq sb,
+  al_postc_star m1 m2 c1 c2 PA sq sb -> exists n, post_iter m1 m2 c1 c2 PA n sq sb.
+Proof.
+  intros m1 m2 c1 c2 PA sq sb (sp & sa & HP & Hs).
+  remember (sp, sa) as p eqn:Ep. remember (sq, sb) as r eqn:Er.
+  revert sq sb Er. induction Hs as [ p | p [qp qa] r Hs IH Step ]; intros sq sb Er; subst.
+  - injection Er as -> ->. now exists O.
+  - destruct (IH eq_refl qp qa eq_refl) as (n & Hn).
+    exists (S n), qp, qa. split. exact Hn. exact Step.
+Qed.
+
+Theorem completeness_star :
+  forall m1 m2 PA c1 c2 QB,
+    al_underc_star m1 m2 PA c1 c2 QB ->
+    AL* m1 , m2 :: PA |- c1 // c2 ==> QB.
+Proof.
+  intros m1 m2 PA c1 c2 QB H.
+  eapply DSConsequence with (PA := post_iter m1 m2 c1 c2 PA O).
+  - now intros sp sa.
+  - intros sq sb HQ. exact (star_is_iter _ _ _ _ _ _ _ (H sq sb HQ)).
+  - apply DSVariant. intros n. apply derivable2_strongest_post.
+Qed.
+
+Theorem equivalence_star : forall m1 m2 PA c1 c2 QB,
+  interpret_spec_star m1 m2 PA c1 c2 QB.
+Proof.
+  intros. split.
+  - exact (soundness_star m1 m2 PA c1 c2 QB).
+  - exact (completeness_star m1 m2 PA c1 c2 QB).
 Qed.
