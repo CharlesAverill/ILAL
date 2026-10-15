@@ -654,6 +654,14 @@ Definition al_underc_star (m1 m2 : mode) (PA : aprop2)
                           (c1 c2 : astmt) (QB : aprop2) : Prop :=
   forall sq sb, QB sq sb -> al_postc_star m1 m2 c1 c2 PA sq sb.
 
+Definition al_postc_run (m1 m2 : mode) (c1 c2 : astmt) (PA : aprop2) : aprop2 :=
+  fun sq sb =>
+    exists sp sa, PA sp sa /\ cds_run m1 m2 c1 c2 (sp, sa) (sq, sb).
+
+Definition al_underc_run (m1 m2 : mode) (PA : aprop2)
+                         (c1 c2 : astmt) (QB : aprop2) : Prop :=
+  forall sq sb, QB sq sb -> al_postc_run m1 m2 c1 c2 PA sq sb.
+
 (** Composed proof system *)
 
 Definition aprod (P A : aprop) : aprop2 := fun sp sa => P sp /\ A sa.
@@ -1250,6 +1258,48 @@ Proof.
         destruct (IHn sp sa Hp) as (s0 & a0 & H0 & Hs).
         exists s0, a0. split. exact H0. eapply CSN; eassumption. }
     intros sq sb (n & Hn). now apply (Aux n).
+Qed.
+
+(** Proof system for runs of a fixed system, for [cds_run] *)
+
+Inductive derivable_run (m1 m2 : mode) : aprop2 -> astmt -> astmt -> aprop2 -> Prop :=
+| DRDone : forall PA, derivable_run m1 m2 PA ASkip ASkip PA
+(* One [cds] step of prefixes [d1], [d2], then a run of the rests [k1], [k2] *)
+| DRStep : forall PA RB QB c1 c2 d1 d2 k1 k2,
+    AL m1 , m2 :: PA |- d1 // d2 ==> RB ->
+    prefix c1 d1 k1 ->
+    prefix c2 d2 k2 ->
+    derivable_run m1 m2 RB k1 k2 QB ->
+    derivable_run m1 m2 PA c1 c2 QB
+| DRConsequence : forall PA PA' QB QB' c1 c2,
+    PA ==>> PA' ->
+    QB' ==>> QB ->
+    derivable_run m1 m2 PA c1 c2 QB ->
+    derivable_run m1 m2 PA' c1 c2 QB'
+(* Runs from different pairs may cut the programs differently *)
+| DRDisjI : forall (I : Type) (PA QB : I -> aprop2) c1 c2,
+    (forall i, derivable_run m1 m2 (PA i) c1 c2 (QB i)) ->
+    derivable_run m1 m2 (fun sp sa => exists i, PA i sp sa) c1 c2
+                        (fun sq sb => exists i, QB i sq sb).
+
+Theorem soundness_run :
+  forall m1 m2 PA c1 c2 QB,
+    derivable_run m1 m2 PA c1 c2 QB ->
+    al_underc_run m1 m2 PA c1 c2 QB.
+Proof.
+  intros m1 m2 PA c1 c2 QB H. induction H; intros sq sb HQ.
+  - (* DRDone *)
+    exists sq, sb. split. exact HQ. apply CRDone.
+  - (* DRStep *)
+    destruct (IHderivable_run sq sb HQ) as (rp & ra & HR & Hr).
+    destruct (soundness2 _ _ _ _ _ _ H rp ra HR) as (sp & sa & HP & Hc).
+    exists sp, sa. split. exact HP. eapply CRStep; eassumption.
+  - (* DRConsequence *)
+    destruct (IHderivable_run sq sb (H0 sq sb HQ)) as (sp & sa & HP & Hs).
+    exists sp, sa. split. now apply H. exact Hs.
+  - (* DRDisjI *)
+    destruct HQ as (i & HQ). destruct (H0 i sq sb HQ) as (sp & sa & HP & Hs).
+    exists sp, sa. split. now exists i. exact Hs.
 Qed.
 
 (* Frame rule / constancy *)

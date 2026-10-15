@@ -137,7 +137,6 @@ Qed.
 (** ** Completeness *)
 
 Definition sing (X : estate) : aprop := fun sig => sig = X.
-Definition sing2p (p : estate * estate) : aprop2 := fun sp sa => (sp, sa) = p.
 
 (* Atomic steps reuse tier-1 [completeness] *)
 Lemma sderiv_atom : forall m c sig sig',

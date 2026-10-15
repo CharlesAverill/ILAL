@@ -2,8 +2,9 @@
 
     Mirrors [IL.v]'s [interpret_spec] / [completeness] / [equivalence] for the
     single-thread system ([derivable] vs [under_approximate]), the composed
-    one-step system ([derivable2] vs [al_underc_r]) and its iteration
-    ([derivable_star] vs [al_underc_star]).
+    one-step system ([derivable2] vs [al_underc_r]), its iteration
+    ([derivable_star] vs [al_underc_star]) and runs of a fixed system
+    ([derivable_run] vs [al_underc_run]).
 
 *)
 From ILAL Require Import AL.AL AL.language state tactics.
@@ -353,4 +354,49 @@ Proof.
   intros. split.
   - exact (soundness_star m1 m2 PA c1 c2 QB).
   - exact (completeness_star m1 m2 PA c1 c2 QB).
+Qed.
+
+(** ** Runs of a fixed system ([cds_run]) *)
+
+Definition interpret_spec_run (m1 m2 : mode) (PA : aprop2) (c1 c2 : astmt)
+                              (QB : aprop2) : Prop :=
+  derivable_run m1 m2 PA c1 c2 QB <-> al_underc_run m1 m2 PA c1 c2 QB.
+
+Definition sing2p (p : estate * estate) : aprop2 := fun sp sa => (sp, sa) = p.
+
+(* A run is derivable between singletons; each step reuses [completeness2] *)
+Lemma run_derivable : forall m1 m2 c1 c2 p q,
+  cds_run m1 m2 c1 c2 p q -> derivable_run m1 m2 (sing2p p) c1 c2 (sing2p q).
+Proof.
+  intros m1 m2 c1 c2 p q H. induction H.
+  - apply DRDone.
+  - eapply DRStep; [ | eassumption | eassumption | eassumption ].
+    apply completeness2. intros sq sb E. exists (fst p), (snd p).
+    split. now destruct p. rewrite E. now destruct p.
+Qed.
+
+Theorem completeness_run :
+  forall m1 m2 PA c1 c2 QB,
+    al_underc_run m1 m2 PA c1 c2 QB ->
+    derivable_run m1 m2 PA c1 c2 QB.
+Proof.
+  intros m1 m2 PA c1 c2 QB H.
+  (* One index per run from a [PA] pair *)
+  set (I := { r : (estate * estate) * (estate * estate) |
+              PA (fst (fst r)) (snd (fst r)) /\ cds_run m1 m2 c1 c2 (fst r) (snd r) }).
+  eapply DRConsequence with
+    (PA := fun sp sa => exists i : I, sing2p (fst (proj1_sig i)) sp sa)
+    (QB := fun sq sb => exists i : I, sing2p (snd (proj1_sig i)) sq sb).
+  - intros sp sa [ [r Hr] E ]. simpl in E. rewrite <- E in Hr. apply Hr.
+  - intros sq sb HQ. destruct (H sq sb HQ) as (sp & sa & HP & Hs).
+    now exists (exist _ ((sp, sa), (sq, sb)) (conj HP Hs)).
+  - apply DRDisjI. intros [r Hr]. exact (run_derivable _ _ _ _ _ _ (proj2 Hr)).
+Qed.
+
+Theorem equivalence_run : forall m1 m2 PA c1 c2 QB,
+  interpret_spec_run m1 m2 PA c1 c2 QB.
+Proof.
+  intros. split.
+  - exact (soundness_run m1 m2 PA c1 c2 QB).
+  - exact (completeness_run m1 m2 PA c1 c2 QB).
 Qed.
