@@ -451,3 +451,66 @@ Proof.
   - now apply soundness.
   - now apply completeness.
 Qed.
+
+(** ** Constancy (Fig. 3)
+
+    [Mod C] lists the variables assigned in [C].  [F] is independent of a
+    list of variables when it cannot tell apart two states that agree on
+    every other variable; [indep F (Mod C)] is the semantic reading of the
+    paper's side condition Mod(C) ∩ Free(F) = ∅.  Constancy is not a
+    constructor of [derivable]: since IL is complete, it is admissible
+    ([constancy]), by soundness, [constancy_sem] and completeness. *)
+
+Fixpoint Mod (C : stmt) : list id :=
+  match C with
+  | Assign x _ | NondetAssign x => cons x nil
+  | Seq C1 C2 | Choice C1 C2 => app (Mod C1) (Mod C2)
+  | Star C => Mod C
+  | Skip | Error | Assumes _ => nil
+  end.
+
+(** A command leaves every variable outside [Mod C] unchanged. *)
+Fixpoint ds_mod (C : stmt) (ex : ExitCondition) (p : state * state)
+  (H : ds C ex p) {struct H} :
+  forall y, ~ List.In y (Mod C) -> snd p y = fst p y.
+Proof.
+  destruct H; simpl; intros y Hy.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
+  - transitivity (s2 y); [exact (ds_mod _ _ _ H0 y Hy) | exact (ds_mod _ _ _ H y Hy)].
+  - exact (ds_mod _ _ _ H y Hy).
+  - exact (ds_mod _ _ _ H y (fun Hi => Hy (List.in_or_app _ _ _ (or_introl Hi)))).
+  - exact (ds_mod _ _ _ H y (fun Hi => Hy (List.in_or_app _ _ _ (or_intror Hi)))).
+  - exact (ds_mod _ _ _ H y (fun Hi => Hy (List.in_or_app _ _ _ (or_introl Hi)))).
+  - destruct H as [s2 [H1 H2]]. transitivity (s2 y).
+    + exact (ds_mod _ _ _ H2 y (fun Hi => Hy (List.in_or_app _ _ _ (or_intror Hi)))).
+    + exact (ds_mod _ _ _ H1 y (fun Hi => Hy (List.in_or_app _ _ _ (or_introl Hi)))).
+  - apply update_neq. intro E. apply Hy. left. exact E.
+  - apply update_neq. intro E. apply Hy. left. exact E.
+Qed.
+
+Definition indep (F : prop) (xs : list id) : Prop :=
+  forall s s', (forall y, ~ List.In y xs -> s y = s' y) -> (F s <-> F s').
+
+Theorem constancy_sem : forall P C ex Q F,
+  indep F (Mod C) ->
+  {{P}} denote C ex {{Q}} ->
+  {{fun s => P s /\ F s}} denote C ex {{fun s => Q s /\ F s}}.
+Proof.
+  intros P C ex Q F HF H s [HQ HFs].
+  destruct (H s HQ) as (s0 & HP & Hds).
+  exists s0. split; [split; [exact HP |] | exact Hds].
+  refine (proj2 (HF s0 s _) HFs).
+  intros y Hy. symmetry. exact (ds_mod C ex (s0, s) Hds y Hy).
+Qed.
+
+Theorem constancy : forall P C ex Q F,
+  indep F (Mod C) ->
+  derivable P C ex Q ->
+  derivable (fun s => P s /\ F s) C ex (fun s => Q s /\ F s).
+Proof.
+  intros P C ex Q F HF H.
+  apply completeness. apply constancy_sem; [exact HF | apply soundness; exact H].
+Qed.

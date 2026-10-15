@@ -895,9 +895,10 @@ Qed.
     [num] large enough to land BOTH services in their "large order" branch,
     the adversary's [guess1 == guess2] assertion succeeds -- both equal
     [initp / 10].  As with Example 2, the "small order" fractional branch is
-    kept in the program text (for fidelity, exactly as the paper's own proof
-    leaves it an unresolved [Disj] alternative) but never exercised by this
-    attack. *)
+    kept in the program text (as the paper's own proof leaves it an
+    unresolved [Disj] alternative) but never exercised by this attack.  Its
+    arithmetic is not the paper's: values here are naturals, so the paper's
+    float expression [initp * (1 - dec)] truncates. *)
 
 Definition V9MIL : N := 9000000.
 Definition V18MIL : N := 18000000.
