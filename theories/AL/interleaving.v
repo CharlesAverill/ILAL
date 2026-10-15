@@ -55,10 +55,8 @@ Inductive sderiv (m : mode) : aprop -> astmt -> astmt -> aprop -> Prop :=
 | SDParR : forall P c1 c2, sderiv m P (APar c1 c2) c2 P
 | SDStar0 : forall P c, sderiv m P (AStar c) ASkip P
 | SDStarN : forall P c, sderiv m P (AStar c) (ASeq c (AStar c)) P
-(* [SLocalEnter] restores [x] to its entry value [v] *)
-| SDLocal : forall P x e c (v : N),
-    (forall sig, P sig -> mode_store m sig x = v) ->
-    sderiv m P (ALocal x e c) (ASeq (AAssign x e) (ASeq c (AAssign x (fun _ => v)))) P.
+| SDLocal : forall P x e c,
+    sderiv m P (ALocal x e c) (ASeq (AAssign x e) (ASeq c (ARand x))) P.
 
 (** ** Interleaved proof system *)
 
@@ -111,7 +109,6 @@ Proof.
     exists sp. split. exact Hp. now apply atomic_sstep.
   - destruct (IHsderiv sq Hq) as (sp & Hp & Hs).
     exists sp. split. exact Hp. now constructor.
-  - exists sq. split. exact Hq. rewrite <- (H sq Hq). constructor.
 Qed.
 
 Theorem isoundness : forall m1 m2 PA c1 c2 d1 d2 QB,
@@ -154,7 +151,6 @@ Proof.
     try (apply sderiv_atom; [ exact I | now constructor ]);
     try (constructor; reflexivity).
   - (* SSeqStep *) now constructor.
-  - (* SLocalEnter *) apply SDLocal. now intros ? ->.
 Qed.
 
 (* A one-step run is derivable between singletons *)

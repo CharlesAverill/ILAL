@@ -621,29 +621,46 @@ Inductive cds_star (m1 m2 : mode) (c1 c2 : astmt) :
     cds_star m1 m2 c1 c2 p r.
 
 (** Runs of a FIXED system [c1 || c2], for the stepwise walkthroughs of the
-    paper's examples.  Each step runs a prefix of each side's remaining
-    program as one [cds] step and leaves the rest; a side that does not move
-    in a step (including during a transfer) runs the empty prefix [skip].
-    The run ends when both programs are used up.
+    paper's examples.  A run alternates execution steps, where each side runs
+    a prefix of its remaining program and keeps the rest (a side that does
+    not move runs [skip]), with transfers, which leave both remaining
+    programs unchanged.  The run ends when both programs are used up.
 
-    [prefix c d k]: [c] behaves as [d ;; k] ([prefix_sound]), cutting [c] only
-    at a point of its sequential structure, never inside a choice, loop, or
-    local scope. *)
+    [prefix c d k]: running [d] then [k] is a way to run [c]
+    ([prefix_sound]).  Besides cutting at [;;], a prefix may resolve a choice,
+    unroll a loop, or enter a local scope, so a transfer can happen at any
+    point between two atomic commands ([cstep_star_cds_run]). *)
 Inductive prefix : astmt -> astmt -> astmt -> Prop :=
 | PrefAll : forall c, prefix c c ASkip
 | PrefNone : forall c, prefix c ASkip c
 | PrefSeq : forall c1 c2, prefix (ASeq c1 c2) c1 c2
 | PrefSeqR : forall c1 c2 d k, prefix c2 d k -> prefix (ASeq c1 c2) (ASeq c1 d) k
-| PrefSeqL : forall c1 c2 d k, prefix c1 d k -> prefix (ASeq c1 c2) d (ASeq k c2).
+| PrefSeqL : forall c1 c2 d k, prefix c1 d k -> prefix (ASeq c1 c2) d (ASeq k c2)
+| PrefChoiceL : forall c1 c2 d k, prefix c1 d k -> prefix (AChoice c1 c2) d k
+| PrefChoiceR : forall c1 c2 d k, prefix c2 d k -> prefix (AChoice c1 c2) d k
+| PrefParL : forall c1 c2 d k, prefix c1 d k -> prefix (APar c1 c2) d k
+| PrefParR : forall c1 c2 d k, prefix c2 d k -> prefix (APar c1 c2) d k
+| PrefStar0 : forall c, prefix (AStar c) ASkip ASkip
+| PrefStarN : forall c d k, prefix (ASeq c (AStar c)) d k -> prefix (AStar c) d k
+(* [x] is havocked on exit, as in [EDLocal] *)
+| PrefLocal : forall x e c d k,
+    prefix (ASeq (AAssign x e) (ASeq c (ARand x))) d k -> prefix (ALocal x e c) d k.
 
 Inductive cds_run (m1 m2 : mode) :
   astmt -> astmt -> (estate * estate) -> (estate * estate) -> Prop :=
 | CRDone : forall p, cds_run m1 m2 ASkip ASkip p p
-| CRStep : forall c1 c2 d1 d2 k1 k2 p q r,
-    cds m1 m2 d1 d2 p q ->
+(* Both sides run a prefix; the rests continue *)
+| CRExec : forall c1 c2 d1 d2 k1 k2 sp sa sq sb r,
+    ds d1 m1 (sp, sq) ->
+    ds d2 m2 (sa, sb) ->
     prefix c1 d1 k1 ->
     prefix c2 d2 k2 ->
-    cds_run m1 m2 k1 k2 q r ->
+    cds_run m1 m2 k1 k2 (sq, sb) r ->
+    cds_run m1 m2 c1 c2 (sp, sa) r
+(* A transfer consumes no command *)
+| CRCom : forall c1 c2 p q r,
+    cds m1 m2 ASkip ASkip p q ->
+    cds_run m1 m2 c1 c2 q r ->
     cds_run m1 m2 c1 c2 p r.
 
 Definition al_postc_star (m1 m2 : mode) (c1 c2 : astmt) (PA : aprop2) : aprop2 :=
@@ -1041,6 +1058,34 @@ Proof.
   exact Hcds.
 Qed.
 
+(* A transfer lengthens a channel on one side and shortens it on the other, so
+   a [cds] step that leaves one side's state unchanged runs both commands *)
+Ltac transfer_absurd :=
+  exfalso;
+  match goal with
+  | E : context [ _ [[ ?k :=ach _ ]] ] |- _ =>
+      match type of E with @eq estate _ _ =>
+        pose proof (f_equal (fun sig => length (sig.(astate).(ch) k)) E) end
+  | E : context [ _ [[ ?k :=vch _ ]] ] |- _ =>
+      match type of E with @eq estate _ _ =>
+        pose proof (f_equal (fun sig => length (sig.(vstate).(ch) k)) E) end
+  end;
+  simpl in *; rewrite ?update_eq in *;
+  repeat match goal with Hl : @eq ?T _ _ |- _ => apply (f_equal (@length N)) in Hl end;
+  rewrite ?length_app in *; simpl in *; lia.
+
+Lemma cds_frozenR : forall m1 m2 c1 c2 X Y X',
+  cds m1 m2 c1 c2 (X, Y) (X', Y) -> ds c1 m1 (X, X') /\ ds c2 m2 (Y, Y).
+Proof.
+  intros m1 m2 c1 c2 X Y X' H. inversion H; subst; [ now split | transfer_absurd .. ].
+Qed.
+
+Lemma cds_frozenL : forall m1 m2 c1 c2 X Y Y',
+  cds m1 m2 c1 c2 (X, Y) (X, Y') -> ds c1 m1 (X, X) /\ ds c2 m2 (Y, Y').
+Proof.
+  intros m1 m2 c1 c2 X Y Y' H. inversion H; subst; [ now split | transfer_absurd .. ].
+Qed.
+
 End Tier2Soundness.
 
 (** Adversarial Consequence *)
@@ -1093,28 +1138,57 @@ Proof. intros c1 c2 m x z H. inversion H; subst. eexists. split; eassumption. Qe
 Lemma ds_skip_inv : forall m x y, ds ASkip m (x, y) -> x = y.
 Proof. intros m x y H. inversion H; subst. reflexivity. Qed.
 
-(** Cutting a program at a prefix does not change its meaning. *)
-Theorem prefix_sound : forall c d k, prefix c d k ->
-  forall m x y, ds c m (x, y) <-> ds (ASeq d k) m (x, y).
+Lemma ds_star_left : forall c m a b d,
+  ds c m (a, b) -> ds (AStar c) m (b, d) -> ds (AStar c) m (a, d).
 Proof.
-  intros c d k Hp. induction Hp as [c | c | c1 c2 | c1 c2 d k Hp IH | c1 c2 d k Hp IH];
-    intros m x y; split; intros H.
-  - eapply EDSeq; [exact H | apply EDSkip].
-  - apply ds_seq_inv in H as (z & H1 & H2). apply ds_skip_inv in H2. subst. exact H1.
-  - eapply EDSeq; [apply EDSkip | exact H].
-  - apply ds_seq_inv in H as (z & H1 & H2). apply ds_skip_inv in H1. subst. exact H2.
+  intros c m a b d Hc Hstar.
+  remember (AStar c) as sc eqn:E. remember (b, d) as bd eqn:Ebd.
+  revert c a b d Hc E Ebd. induction Hstar; intros c0 a0 b0 d0 Hc E Ebd;
+    try discriminate E.
+  - injection E as ->. injection Ebd as -> ->.
+    eapply EDStarN. apply EDStar0. exact Hc.
+  - injection E as ->. injection Ebd as <- <-.
+    eapply EDStarN.
+    + eapply IHHstar1. exact Hc. reflexivity. reflexivity.
+    + exact Hstar2.
+Qed.
+
+Lemma ds_local_desugar : forall m x e c sig sig'',
+  ds (ASeq (AAssign x e) (ASeq c (ARand x))) m (sig, sig'') ->
+  ds (ALocal x e c) m (sig, sig'').
+Proof.
+  intros m x e c sig sig'' H.
+  inversion H; subst; clear H.
+  inversion H6; subst; clear H6.
+  destruct m; simpl in *.
+  - inversion H4; subst; clear H4. inversion H7; subst; clear H7.
+    eauto using EDLocal.
+  - inversion H4; subst. inversion H7; subst.
+    eauto using EDLocal.
+Qed.
+
+(** Cutting a program at a prefix is a way to run it.  The converse fails
+    once a prefix resolves a choice or unrolls a loop. *)
+Theorem prefix_sound : forall c d k, prefix c d k ->
+  forall m s1 s2, ds (ASeq d k) m (s1, s2) -> ds c m (s1, s2).
+Proof.
+  intros c d k Hp. induction Hp; intros m s1 s2 H.
+  - apply ds_seq_inv in H as (z & H1 & H2). apply ds_skip_inv in H2. now subst.
+  - apply ds_seq_inv in H as (z & H1 & H2). apply ds_skip_inv in H1. now subst.
   - exact H.
-  - exact H.
-  - apply ds_seq_inv in H as (z & H1 & H2). apply IH in H2.
-    apply ds_seq_inv in H2 as (w & H2 & H3).
-    eapply EDSeq; [eapply EDSeq; eassumption | exact H3].
   - apply ds_seq_inv in H as (z & H1 & H3). apply ds_seq_inv in H1 as (w & H1 & H2).
-    eapply EDSeq; [exact H1 |]. apply IH. eapply EDSeq; eassumption.
-  - apply ds_seq_inv in H as (z & H1 & H3). apply IH in H1.
-    apply ds_seq_inv in H1 as (w & H1 & H2).
-    eapply EDSeq; [exact H1 | eapply EDSeq; eassumption].
+    eapply EDSeq; [exact H1 |]. apply IHHp. eapply EDSeq; eassumption.
   - apply ds_seq_inv in H as (z & H1 & H2). apply ds_seq_inv in H2 as (w & H2 & H3).
-    eapply EDSeq; [| exact H3]. apply IH. eapply EDSeq; eassumption.
+    eapply EDSeq; [| exact H3]. apply IHHp. eapply EDSeq; eassumption.
+  - apply EDChoiceL. now apply IHHp.
+  - apply EDChoiceR. now apply IHHp.
+  - apply EDParL. now apply IHHp.
+  - apply EDParR. now apply IHHp.
+  - apply ds_seq_inv in H as (z & H1 & H2).
+    apply ds_skip_inv in H1. apply ds_skip_inv in H2. subst. apply EDStar0.
+  - apply IHHp in H. apply ds_seq_inv in H as (z & H1 & H2).
+    eapply ds_star_left; eassumption.
+  - apply ds_local_desugar. now apply IHHp.
 Qed.
 
 Definition PBV_premise (m1 m2 : mode) (P A : nat -> aprop) (c1 c2 : astmt)
@@ -1264,12 +1338,18 @@ Qed.
 
 Inductive derivable_run (m1 m2 : mode) : aprop2 -> astmt -> astmt -> aprop2 -> Prop :=
 | DRDone : forall PA, derivable_run m1 m2 PA ASkip ASkip PA
-(* One [cds] step of prefixes [d1], [d2], then a run of the rests [k1], [k2] *)
-| DRStep : forall PA RB QB c1 c2 d1 d2 k1 k2,
-    AL m1 , m2 :: PA |- d1 // d2 ==> RB ->
+(* Each side runs a prefix ([D2Par] on [d1], [d2]); the rests continue *)
+| DRExec : forall P A Q B QB c1 c2 d1 d2 k1 k2,
+    P, [d1] m1, Q ->
+    A, [d2] m2, B ->
     prefix c1 d1 k1 ->
     prefix c2 d2 k2 ->
-    derivable_run m1 m2 RB k1 k2 QB ->
+    derivable_run m1 m2 (aprod Q B) k1 k2 QB ->
+    derivable_run m1 m2 (aprod P A) c1 c2 QB
+(* A transfer ([D2Com]/[D2ComAP]); the programs are unchanged *)
+| DRCom : forall PA RB QB c1 c2,
+    AL m1 , m2 :: PA |- skip // skip ==> RB ->
+    derivable_run m1 m2 RB c1 c2 QB ->
     derivable_run m1 m2 PA c1 c2 QB
 | DRConsequence : forall PA PA' QB QB' c1 c2,
     PA ==>> PA' ->
@@ -1290,10 +1370,15 @@ Proof.
   intros m1 m2 PA c1 c2 QB H. induction H; intros sq sb HQ.
   - (* DRDone *)
     exists sq, sb. split. exact HQ. apply CRDone.
-  - (* DRStep *)
+  - (* DRExec *)
+    destruct (IHderivable_run sq sb HQ) as (rp & ra & [HQ1 HB] & Hr).
+    destruct (soundness _ _ _ _ H rp HQ1) as (sp & HP & Hd1).
+    destruct (soundness _ _ _ _ H0 ra HB) as (sa & HA & Hd2).
+    exists sp, sa. split. split; assumption. eapply CRExec; eassumption.
+  - (* DRCom *)
     destruct (IHderivable_run sq sb HQ) as (rp & ra & HR & Hr).
     destruct (soundness2 _ _ _ _ _ _ H rp ra HR) as (sp & sa & HP & Hc).
-    exists sp, sa. split. exact HP. eapply CRStep; eassumption.
+    exists sp, sa. split. exact HP. eapply CRCom; eassumption.
   - (* DRConsequence *)
     destruct (IHderivable_run sq sb (H0 sq sb HQ)) as (sp & sa & HP & Hs).
     exists sp, sa. split. now apply H. exact Hs.
@@ -1487,10 +1572,9 @@ Inductive sstep : mode -> astmt -> estate -> astmt -> estate -> Prop :=
 | SChoiceR : forall m c1 c2 sig, sstep m (AChoice c1 c2) sig c2 sig
 | SStar0 : forall m c sig, sstep m (AStar c) sig ASkip sig
 | SStarN : forall m c sig, sstep m (AStar c) sig (ASeq c (AStar c)) sig
+(* [x] is havocked on exit, as in [EDLocal] and the paper's semantics *)
 | SLocalEnter : forall m x e c sig,
-    sstep m (ALocal x e c) sig
-          (ASeq (AAssign x e)
-                (ASeq c (AAssign x (fun _ => mode_store m sig x)))) sig
+    sstep m (ALocal x e c) sig (ASeq (AAssign x e) (ASeq c (ARand x))) sig
 (* Single-thread [c1 <||> c2] is a choice, as in [EDParL]/[EDParR] *)
 | SParL : forall m c1 c2 sig, sstep m (APar c1 c2) sig c1 sig
 | SParR : forall m c1 c2 sig, sstep m (APar c1 c2) sig c2 sig.
@@ -1513,36 +1597,6 @@ Qed.
 
 (** Small-step runs are valid big-step executions *)
 Section Adequacy.
-
-Lemma ds_star_left : forall c m a b d,
-  ds c m (a, b) -> ds (AStar c) m (b, d) -> ds (AStar c) m (a, d).
-Proof.
-  intros c m a b d Hc Hstar.
-  remember (AStar c) as sc eqn:E. remember (b, d) as bd eqn:Ebd.
-  revert c a b d Hc E Ebd. induction Hstar; intros c0 a0 b0 d0 Hc E Ebd;
-    try discriminate E.
-  - injection E as ->. injection Ebd as -> ->.
-    eapply EDStarN. apply EDStar0. exact Hc.
-  - injection E as ->. injection Ebd as <- <-.
-    eapply EDStarN.
-    + eapply IHHstar1. exact Hc. reflexivity. reflexivity.
-    + exact Hstar2.
-Qed.
-
-Lemma ds_local_desugar : forall m x e c sig sig'',
-  ds (ASeq (AAssign x e)
-           (ASeq c (AAssign x (fun _ => mode_store m sig x)))) m (sig, sig'') ->
-  ds (ALocal x e c) m (sig, sig'').
-Proof.
-  intros m x e c sig sig'' H.
-  inversion H; subst; clear H.
-  inversion H6; subst; clear H6.
-  destruct m; simpl in *.
-  - inversion H4; subst; clear H4. inversion H7; subst; clear H7.
-    eauto using EDLocal.
-  - inversion H4; subst. inversion H7; subst.
-    eauto using EDLocal.
-Qed.
 
 Lemma sstep_expansion : forall m c sig c' sig',
   sstep m c sig c' sig' ->
@@ -1688,3 +1742,269 @@ Lemma sstep_one : forall m c sig sig',
 Proof. intros. eapply SSN. exact H. apply SS0. Qed.
 
 End SmallStepSemantics.
+
+(** ** Runs of a fixed system are its interleavings
+
+    [cds_run] keeps the program's and the adversary's views in two states,
+    [cstep] in one shared [estate].  They agree when [sp]'s program view and
+    [sa]'s adversary view are [sig]'s.  Under that agreement, terminating
+    [cstep] runs and [cds_run] runs reach the same states
+    ([cstep_star_cds_run], [cds_run_cstep_star], [attack_reaches_iff]). *)
+Section RunAdequacy.
+
+Definition view (m : mode) (sig : estate) : cstate :=
+  match m with Ok => sig.(vstate) | Ad => sig.(astate) end.
+
+(* [sig] with [m]'s view replaced by [c] *)
+Definition with_view (m : mode) (sig : estate) (c : cstate) : estate :=
+  match m with
+  | Ok => {| vstate := c; astate := sig.(astate) |}
+  | Ad => {| vstate := sig.(vstate); astate := c |}
+  end.
+
+Lemma view_with_view : forall m sig c, view m (with_view m sig c) = c.
+Proof. now destruct m. Qed.
+
+Lemma with_view_view : forall m sig, with_view m sig (view m sig) = sig.
+Proof. intros [] [v a]; reflexivity. Qed.
+
+Lemma with_view_twice : forall m sig c c',
+  with_view m (with_view m sig c) c' = with_view m sig c'.
+Proof. now destruct m. Qed.
+
+Lemma sstep_eq : forall m c sig c' s1 s2,
+  sstep m c sig c' s1 -> s1 = s2 -> sstep m c sig c' s2.
+Proof. intros. now subst. Qed.
+
+(* A step in mode [m] leaves the other view unchanged ... *)
+Lemma sstep_view : forall m c sig c' sig',
+  sstep m c sig c' sig' -> sig' = with_view m sig (view m sig').
+Proof.
+  intros m c sig c' sig' H. induction H; try exact IHsstep;
+    destruct sig as [vv aa]; try destruct m; reflexivity.
+Qed.
+
+(* ... and depends only on [m]'s view *)
+Lemma sstep_frame : forall m c sig c' sig',
+  sstep m c sig c' sig' ->
+  forall tau, view m tau = view m sig ->
+  sstep m c tau c' (with_view m tau (view m sig')).
+Proof.
+  intros m c sig c' sig' H. induction H; intros [tv ta] Hv;
+    try (rewrite <- Hv, with_view_view).
+  all: try (constructor; apply IHsstep; exact Hv).
+  all: try (destruct m; simpl in Hv; subst).
+  all: try (eapply sstep_eq; [ constructor | reflexivity ]; fail).
+  all: try (constructor; fail).
+  - apply SAssume. exact H.
+  - apply SAssume. exact H.
+  - eapply sstep_eq; [ apply SRead; exact H | reflexivity ].
+  - eapply sstep_eq; [ apply SRead; exact H | reflexivity ].
+  - apply SAdvAssertS. simpl in Hv. now subst.
+  - apply SAdvAssertF. simpl in Hv. now subst.
+Qed.
+
+Lemma sstep_star_frame : forall m c sig c' sig',
+  sstep_star m c sig c' sig' ->
+  forall tau, view m tau = view m sig ->
+  sstep_star m c tau c' (with_view m tau (view m sig')).
+Proof.
+  intros m c sig c' sig' H. induction H; intros tau Hv.
+  - rewrite <- Hv, with_view_view. apply SS0.
+  - eapply SSN. eapply sstep_frame; eassumption.
+    rewrite <- (with_view_twice m tau (view m sig') (view m sig'')).
+    apply IHsstep_star. now rewrite view_with_view.
+Qed.
+
+(* One small step runs a prefix and leaves exactly the residual *)
+Lemma sstep_prefix : forall m c sig c' sig',
+  sstep m c sig c' sig' -> exists d, prefix c d c' /\ ds d m (sig, sig').
+Proof.
+  intros m c sig c' sig' H.
+  pose proof (sstep_expansion _ _ _ _ _ H) as Hexp.
+  induction H;
+    try (eexists; split; [ apply PrefAll | apply Hexp, EDSkip ]; fail).
+  - exists ASkip. split. apply PrefSeq. apply EDSkip.
+  - destruct (IHsstep (sstep_expansion _ _ _ _ _ H)) as (d & Hp & Hd).
+    exists d. split. now apply PrefSeqL. exact Hd.
+  - exists ASkip. split. apply PrefChoiceL, PrefNone. apply EDSkip.
+  - exists ASkip. split. apply PrefChoiceR, PrefNone. apply EDSkip.
+  - exists ASkip. split. apply PrefStarN, PrefNone. apply EDSkip.
+  - exists ASkip. split. apply PrefLocal, PrefNone. apply EDSkip.
+  - exists ASkip. split. apply PrefParL, PrefNone. apply EDSkip.
+  - exists ASkip. split. apply PrefParR, PrefNone. apply EDSkip.
+Qed.
+
+(* Converse of [sstep_star_sound]; loops also return to themselves *)
+Lemma ds_sstep_star_aux : forall c m p, ds c m p ->
+  sstep_star m c (fst p) ASkip (snd p)
+  /\ (forall c0, c = AStar c0 -> sstep_star m c (fst p) c (snd p)).
+Proof.
+  intros c m p H. induction H; simpl in *;
+    split; try (intros ? E; discriminate E).
+  - apply SS0.
+  - apply sstep_one. now apply SAssume.
+  - apply sstep_one. apply (SAssign Ok).
+  - apply sstep_one. apply (SAssign Ad).
+  - apply sstep_one. apply (SRand Ok).
+  - apply sstep_one. apply (SRand Ad).
+  - eapply sstep_star_trans. apply sstep_seq_run. apply IHds1. apply IHds2.
+  - apply sstep_one. now apply (SRead Ok).
+  - apply sstep_one. now apply (SRead Ad).
+  - apply sstep_one. apply (SWrite Ok).
+  - apply sstep_one. apply (SWrite Ad).
+  - apply sstep_one. now apply SAdvAssertS.
+  - apply sstep_one. now apply SAdvAssertF.
+  - eapply SSN. apply SChoiceL. apply IHds.
+  - eapply SSN. apply SChoiceR. apply IHds.
+  - apply sstep_one. apply SStar0.
+  - intros. apply SS0.
+  - assert (L : sstep_star m (AStar c) s1 (AStar c) s3).
+    { eapply sstep_star_trans. apply (proj2 IHds1 c eq_refl).
+      eapply SSN. apply SStarN. apply sstep_seq_run. apply IHds2. }
+    eapply sstep_star_trans. exact L. apply sstep_one, SStar0.
+  - intros c0 E. injection E as ->.
+    eapply sstep_star_trans. apply (proj2 IHds1 c0 eq_refl).
+    eapply SSN. apply SStarN. apply sstep_seq_run. apply IHds2.
+  - eapply SSN. apply SParL. apply IHds.
+  - eapply SSN. apply SParR. apply IHds.
+  - eapply SSN. apply SLocalEnter.
+    eapply sstep_star_trans. apply sstep_seq_run, sstep_one, SAssign.
+    eapply sstep_star_trans. apply sstep_seq_run, IHds.
+    apply sstep_one, SRand.
+Qed.
+
+Lemma ds_sstep_star : forall c m sig sig',
+  ds c m (sig, sig') -> sstep_star m c sig ASkip sig'.
+Proof. intros. exact (proj1 (ds_sstep_star_aux _ _ _ H)). Qed.
+
+(* Running a prefix takes the program to the rest *)
+Lemma prefix_sstep : forall c d k, prefix c d k ->
+  forall m sig sig', ds d m (sig, sig') -> sstep_star m c sig k sig'.
+Proof.
+  intros c d k Hp. induction Hp; intros m sig sig' H.
+  - now apply ds_sstep_star.
+  - apply ds_skip_inv in H. subst. apply SS0.
+  - now apply sstep_seq_run, ds_sstep_star.
+  - apply ds_seq_inv in H as (z & H1 & H2).
+    eapply sstep_star_trans. apply sstep_seq_run, ds_sstep_star, H1. now apply IHHp.
+  - apply sstep_star_under_seq. now apply IHHp.
+  - eapply SSN. apply SChoiceL. now apply IHHp.
+  - eapply SSN. apply SChoiceR. now apply IHHp.
+  - eapply SSN. apply SParL. now apply IHHp.
+  - eapply SSN. apply SParR. now apply IHHp.
+  - apply ds_skip_inv in H. subst. apply sstep_one, SStar0.
+  - eapply SSN. apply SStarN. now apply IHHp.
+  - eapply SSN. apply SLocalEnter. now apply IHHp.
+Qed.
+
+(* Every terminating interleaving is a run *)
+Theorem cstep_star_cds_run : forall cp ca sig cp' ca' sig',
+  cstep_star cp ca sig cp' ca' sig' -> cp' = ASkip -> ca' = ASkip ->
+  forall sp sa, sp.(vstate) = sig.(vstate) -> sa.(astate) = sig.(astate) ->
+  exists sq sb, cds_run Ok Ad cp ca (sp, sa) (sq, sb)
+                /\ sq.(vstate) = sig'.(vstate) /\ sb.(astate) = sig'.(astate).
+Proof.
+  intros cp ca sig cp' ca' sig' H.
+  induction H as [cp ca sig | cp ca sig cp' ca' sig' cp'' ca'' sig'' Hc H IH];
+    intros E1 E2 sp sa Hv Ha; subst.
+  - exists sp, sa. split. apply CRDone. now split.
+  - destruct Hc as [cp ca cp' sig sig' Hs | cp ca ca' sig sig' Hs
+                   | cp ca s0 sig v l1 l2 Hch Hl2 | cp ca s0 sig v l1 l2 Hch Hl2].
+    + (* program step *)
+      destruct (sstep_prefix _ _ _ _ _ (sstep_frame _ _ _ _ _ Hs sp Hv)) as (d & Hp & Hd).
+      assert (Ha' : sa.(astate) = sig'.(astate)).
+      { rewrite (sstep_view _ _ _ _ _ Hs). exact Ha. }
+      destruct (IH eq_refl eq_refl (with_view Ok sp (vstate sig')) sa eq_refl Ha')
+        as (sq & sb & Hr & Hq & Hb).
+      exists sq, sb. split; [| now split].
+      eapply CRExec; [ exact Hd | apply EDSkip | exact Hp | apply PrefNone | exact Hr ].
+    + (* adversary step *)
+      destruct (sstep_prefix _ _ _ _ _ (sstep_frame _ _ _ _ _ Hs sa Ha)) as (d & Hp & Hd).
+      assert (Hv' : sp.(vstate) = sig'.(vstate)).
+      { rewrite (sstep_view _ _ _ _ _ Hs). exact Hv. }
+      destruct (IH eq_refl eq_refl sp (with_view Ad sa (astate sig')) Hv' eq_refl)
+        as (sq & sb & Hr & Hq & Hb).
+      exists sq, sb. split; [| now split].
+      eapply CRExec; [ apply EDSkip | exact Hd | apply PrefNone | exact Hp | exact Hr ].
+    + (* transfer program -> adversary *)
+      destruct (IH eq_refl eq_refl (sp[[ s0 :=vch l1 ]]) (sa[[ s0 :=ach (l2 ++ [v])%list ]]))
+        as (sq & sb & Hr & Hq & Hb).
+      { simpl. now rewrite Hv. }
+      { simpl. now rewrite Ha. }
+      exists sq, sb. split; [| now split].
+      eapply CRCom; [| exact Hr ].
+      apply CComPA; [ now rewrite Hv | now rewrite Ha ].
+    + (* transfer adversary -> program *)
+      destruct (IH eq_refl eq_refl (sp[[ s0 :=vch (l2 ++ [v])%list ]]) (sa[[ s0 :=ach l1 ]]))
+        as (sq & sb & Hr & Hq & Hb).
+      { simpl. now rewrite Hv. }
+      { simpl. now rewrite Ha. }
+      exists sq, sb. split; [| now split].
+      eapply CRCom; [| exact Hr ].
+      apply CComAP; [ now rewrite Ha | now rewrite Hv ].
+Qed.
+
+(* Every run is a terminating interleaving *)
+Theorem cds_run_cstep_star : forall cp ca p q,
+  cds_run Ok Ad cp ca p q ->
+  forall sig, (fst p).(vstate) = sig.(vstate) -> (snd p).(astate) = sig.(astate) ->
+  exists sig', cstep_star cp ca sig ASkip ASkip sig'
+               /\ (fst q).(vstate) = sig'.(vstate) /\ (snd q).(astate) = sig'.(astate).
+Proof.
+  intros cp ca p q H. induction H; intros sig Hv Ha; simpl in *.
+  - exists sig. split. apply CST0. now split.
+  - (* CRExec: the program's prefix, then the adversary's *)
+    set (sig1 := with_view Ok sig (vstate sq)).
+    set (sig2 := with_view Ad sig1 (astate sb)).
+    destruct (IHcds_run sig2 eq_refl eq_refl) as (sig' & Hr & Hq & Hb).
+    exists sig'. split; [| now split].
+    eapply cstep_star_trans.
+    { apply cstep_star_progL.
+      exact (sstep_star_frame _ _ _ _ _ (prefix_sstep _ _ _ H1 _ _ _ H) sig (eq_sym Hv)). }
+    eapply cstep_star_trans; [| exact Hr ].
+    apply cstep_star_progR.
+    exact (sstep_star_frame _ _ _ _ _ (prefix_sstep _ _ _ H2 _ _ _ H0) sig1 (eq_sym Ha)).
+  - (* CRCom: a transfer, or a [skip // skip] no-op *)
+    inversion H as [ ? ? ? ? sp sa sq sb Hd1 Hd2
+                   | ? ? ? ? k sp sa v l1 l2 Hch Hl2
+                   | ? ? ? ? k sp sa v l1 l2 Hch Hl2 ]; subst; simpl in *.
+    + repeat match goal with Hs : ds ASkip _ _ |- _ => apply ds_skip_inv in Hs end.
+      subst. now apply IHcds_run.
+    + destruct (IHcds_run (sig[[ k :=vch l1 ]] [[ k :=ach (sig.(astate).(ch) k ++ [v])%list ]]))
+        as (sig' & Hr & Hq & Hb).
+      { simpl. now rewrite Hv. }
+      { simpl. now rewrite Ha. }
+      exists sig'. split; [| now split].
+      eapply CSTN; [| exact Hr ].
+      apply CStepComPA; [ now rewrite <- Hv | reflexivity ].
+    + destruct (IHcds_run (sig[[ k :=ach l1 ]] [[ k :=vch (sig.(vstate).(ch) k ++ [v])%list ]]))
+        as (sig' & Hr & Hq & Hb).
+      { simpl. now rewrite Hv. }
+      { simpl. now rewrite Ha. }
+      exists sig'. split; [| now split].
+      eapply CSTN; [| exact Hr ].
+      apply CStepComAP; [ now rewrite <- Ha | reflexivity ].
+Qed.
+
+(* The shared state seen by [cstep]: [sp]'s program view, [sa]'s adversary view *)
+Definition join (sp sa : estate) : estate :=
+  {| vstate := sp.(vstate); astate := sa.(astate) |}.
+
+Theorem attack_reaches_iff : forall cp ca sig0 (Post : aprop),
+  attack_reaches cp ca sig0 Post <->
+  attack_reaches_AL Ok Ad cp ca sig0 sig0 (fun sq sb => Post (join sq sb)).
+Proof.
+  intros cp ca sig0 Post. split.
+  - intros (sigf & Hr & HP).
+    destruct (cstep_star_cds_run _ _ _ _ _ _ Hr eq_refl eq_refl sig0 sig0 eq_refl eq_refl)
+      as (sq & sb & Hrun & Hq & Hb).
+    exists sq, sb. split. exact Hrun.
+    unfold join. rewrite Hq, Hb. now destruct sigf.
+  - intros (sq & sb & Hrun & HP).
+    destruct (cds_run_cstep_star _ _ _ _ Hrun sig0 eq_refl eq_refl) as (sig' & Hr & Hq & Hb).
+    exists sig'. split. exact Hr.
+    unfold join in HP. simpl in Hq, Hb. rewrite Hq, Hb in HP. now destruct sig'.
+Qed.
+
+End RunAdequacy.

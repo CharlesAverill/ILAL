@@ -370,7 +370,16 @@ Lemma run_derivable : forall m1 m2 c1 c2 p q,
 Proof.
   intros m1 m2 c1 c2 p q H. induction H.
   - apply DRDone.
-  - eapply DRStep; [ | eassumption | eassumption | eassumption ].
+  - (* each side's prefix by tier-1 [completeness] *)
+    apply DRConsequence with (PA := aprod (fun x => x = sp) (fun x => x = sa))
+                             (QB := sing2p r); [ now intros x y [-> ->] | easy | ].
+    apply DRExec with (Q := fun x => x = sq) (B := fun x => x = sb) (d1 := d1) (d2 := d2)
+                      (k1 := k1) (k2 := k2); try assumption.
+    + apply completeness. intros x ->. now exists sp.
+    + apply completeness. intros x ->. now exists sa.
+    + apply DRConsequence with (PA := sing2p (sq, sb)) (QB := sing2p r);
+        [ intros x y E; now injection E as -> -> | easy | exact IHcds_run ].
+  - eapply DRCom; [ | exact IHcds_run ].
     apply completeness2. intros sq sb E. exists (fst p), (snd p).
     split. now destruct p. rewrite E. now destruct p.
 Qed.

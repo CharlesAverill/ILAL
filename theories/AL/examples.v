@@ -108,6 +108,20 @@ Proof.
   simpl. apply EDSkip.
 Qed.
 
+(** Sanity 5: a transfer runs no command, so [assume False] never finishes,
+    whatever the channels hold. *)
+Lemma assume_false_no_run : forall m1 m2 c2 p q,
+  ~ cds_run m1 m2 (AAssume (fun _ => False)) c2 p q.
+Proof.
+  intros m1 m2 c2 p q H.
+  remember (AAssume (fun _ => False)) as c1 eqn:E.
+  induction H; subst; try discriminate.
+  - inversion H1; subst.
+    + inversion H; subst. contradiction.
+    + now apply IHcds_run.
+  - now apply IHcds_run.
+Qed.
+
 (** ** The attack, under the small-step interleaving semantics.
 
     Flat program and adversary (fresh globals "n","win","val","res"). *)
@@ -303,11 +317,10 @@ Qed.
     tracked separately below, both starting at [init] and diverging until
     a Com step re-synchronises the relevant channel.
 
-    Uses the flat [prog_body]/[adv_body alpha] (no [ALocal] wrapping), for
-    the same reason [example1_attack] does: [DLocal] needs the ENTIRE
-    local scope proved as one Tier-1 fact in one go (it's a single [ds]
-    step), which cannot have a Com step interleaved partway through it --
-    exactly the row-by-row granularity this proof needs. *)
+    Uses the flat [prog_body]/[adv_body alpha] (no [ALocal] wrapping), as
+    [example1_attack] does.  [PrefLocal] would let the run enter the local
+    scopes and transfer inside them, at the cost of threading the locals'
+    entry and exit values through every phase. *)
 Theorem example1_attack_via_AL : forall alpha,
   (alpha > TEN_M)%N ->
   attack_reaches_AL Ok Ad prog_body (adv_body alpha) init init

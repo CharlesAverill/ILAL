@@ -356,9 +356,11 @@ Ltac next_pre_at H c1 c2 X2 Y2 name :=
 (** ** Chaining
 
     [chain_tac] threads a list of already-proved [cds] phase facts, in run
-    order, into one [cds_run] of the fixed system: each phase's commands must
-    be a prefix of what remains of the program and the adversary
-    ([prefix_tac]), and the run must use both up. *)
+    order, into one [cds_run] of the fixed system: a [skip // skip] phase is
+    a transfer ([CRCom]); any other phase leaves one side's state unchanged,
+    so it runs both commands ([cds_frozenL]/[cds_frozenR]), which must be
+    prefixes of what remains of the program and the adversary ([prefix_tac]).
+    The run must use both up. *)
 Ltac prefix_tac :=
   first
     [ apply PrefAll
@@ -366,7 +368,14 @@ Ltac prefix_tac :=
     | apply PrefSeq
     | apply PrefSeqR; prefix_tac
     | apply PrefSeqL; prefix_tac ].
-Ltac chain1 H := eapply CRStep; [ exact H | prefix_tac | prefix_tac | ].
+Ltac chain1 H :=
+  first
+    [ eapply CRCom; [ exact H | ]
+    | let F := fresh "F" in
+      first [ pose proof (cds_frozenR _ _ _ _ _ _ _ H) as F
+            | pose proof (cds_frozenL _ _ _ _ _ _ _ H) as F ];
+      eapply CRExec; [ exact (proj1 F) | exact (proj2 F) | prefix_tac | prefix_tac | ];
+      clear F ].
 Ltac chain_steps Hs :=
   lazymatch Hs with
   | (?Hs', ?H) => chain_steps Hs'; chain1 H
