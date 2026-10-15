@@ -274,7 +274,7 @@ Proof.
     -- exact (D2ComAP m1 m2 (sing2 X Y) c1 c2 s).
 Qed.
 
-Lemma derivable2_strongest_post : forall m1 m2 PA c1 c2,
+Lemma derivable2_exact_post : forall m1 m2 PA c1 c2,
   AL m1 , m2 :: PA |- c1 // c2 ==> (al_postc_r m1 m2 c1 c2 PA).
 Proof.
   intros m1 m2 PA c1 c2.
@@ -301,7 +301,7 @@ Proof.
   eapply D2Consequence with (PA := PA) (QB := al_postc_r m1 m2 c1 c2 PA).
   - now intros a b H. 
   - apply H_AL.
-  - apply derivable2_strongest_post.
+  - apply derivable2_exact_post.
 Qed.
 
 Theorem equivalence2 : forall m1 m2 PA c1 c2 QB, interpret_spec2 m1 m2 PA c1 c2 QB.
@@ -344,7 +344,7 @@ Proof.
   eapply DSConsequence with (PA := post_iter m1 m2 c1 c2 PA O).
   - now intros sp sa.
   - intros sq sb HQ. exact (star_is_iter _ _ _ _ _ _ _ (H sq sb HQ)).
-  - apply DSVariant. intros n. apply derivable2_strongest_post.
+  - apply DSVariant. intros n. apply derivable2_exact_post.
 Qed.
 
 Theorem equivalence_star : forall m1 m2 PA c1 c2 QB,
